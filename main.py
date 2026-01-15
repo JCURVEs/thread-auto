@@ -88,13 +88,14 @@ def save_archive(content: dict, image_urls: list[str], source_url: str, title: s
             if clean_line:
                 raw_title = clean_line
 
-    # Keep Korean, alphanumeric, spaces, hyphens, underscores.
+    # Keep Korean, alphanumeric, spaces, hyphens.
     # Korean Unicode range: \uAC00-\uD7A3
-    safe_title = re.sub(r'[^a-zA-Z0-9\s\-_가-힣]', '', raw_title)
-    # Replace spaces with underscores
-    safe_title = re.sub(r'\s+', '_', safe_title).strip()
+    # User requested NO underscores. We will use spaces.
+    safe_title = re.sub(r'[^a-zA-Z0-9\s\-\uAC00-\uD7A3]', '', raw_title)
+    # Collapse multiple spaces to single space
+    safe_title = re.sub(r'\s+', ' ', safe_title).strip()
     
-    # Limit length to avoid filesystem issues
+    # Limit length
     if len(safe_title) > 50:
         safe_title = safe_title[:50]
     
@@ -104,8 +105,8 @@ def save_archive(content: dict, image_urls: list[str], source_url: str, title: s
     file_path = os.path.join(daily_archive_dir, f"{safe_title}.md")
     
     with open(file_path, "w", encoding="utf-8") as f:
-        # Title
-        f.write(f"# {title}\n\n")
+        # Title (Use the Korean extracted title)
+        f.write(f"# {raw_title}\n\n")
         
         # Main Post & Image[0]
         f.write("## Main Post\n")
