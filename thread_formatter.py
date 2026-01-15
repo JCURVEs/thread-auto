@@ -23,7 +23,7 @@ def format_output(
 
 def print_dry_run(
     data: Dict[str, Any],
-    image_url: Optional[str],
+    image_urls: list[str],
     source_url: str
 ) -> None:
     """
@@ -36,10 +36,10 @@ def print_dry_run(
     print(f"📢 [DRY RUN] 게시물 타입: {data.get('type', 'unknown').upper()}")
     print(separator)
 
-    # Main post
+    # Main post (Image 0)
     print(f"\n[1] 메인 포스트")
-    if image_url:
-        print(f"    🖼️ 이미지: {image_url}")
+    if len(image_urls) > 0:
+        print(f"    🖼️ 이미지[0]: {image_urls[0][:60]}...")
     else:
         print("    🖼️ 이미지: 없음")
     print(sub_separator)
@@ -50,6 +50,11 @@ def print_dry_run(
         replies = data.get("replies", [])
         for i, reply in enumerate(replies):
             print(f"\n[{i + 2}] 대댓글")
+            
+            # Check for Image i+1
+            if len(image_urls) > i + 1:
+                print(f"    🖼️ 이미지[{i+1}]: {image_urls[i+1][:60]}...")
+            
             print(sub_separator)
             print(reply)
 
@@ -126,13 +131,13 @@ def _publish_container(
 
 def post_to_threads(
     data: Dict[str, Any],
-    image_url: Optional[str],
+    image_urls: list[str],
     source_url: str,
     access_token: str
 ) -> bool:
     """
     Post content to Threads using the Graph API.
-    Supports single posts, images, and multi-threaded replies.
+    Distributes images across the Main Post and Replies.
     """
     print("🚀 Threads API로 업로드 시작...")
     
@@ -145,11 +150,12 @@ def post_to_threads(
         print(f"❌ 사용자 정보 조회 실패: {e}")
         return False
 
-    # 2. Main Post
+    # 2. Main Post (Image 0)
     main_text = data.get("main_post", "")
+    main_image = image_urls[0] if len(image_urls) > 0 else None
     
     # Create Container
-    container_id = _create_container(user_id, access_token, main_text, image_url)
+    container_id = _create_container(user_id, access_token, main_text, main_image)
     if not container_id:
         return False
         
@@ -166,8 +172,18 @@ def post_to_threads(
     if data.get("type") == "multi":
         replies = data.get("replies", [])
         for i, reply_text in enumerate(replies):
-            print(f"   ↳ 대댓글 {i+1} 작성 중...")
-            cont_id = _create_container(user_id, access_token, reply_text, reply_to_id=last_post_id)
+            # Assign Image i+1 to Reply i
+            reply_image = image_urls[i+1] if len(image_urls) > i+1 else None
+            
+            print(f"   ↳ 대댓글 {i+1} 작성 중... (이미지: {'있음' if reply_image else '없음'})")
+            cont_id = _create_container(
+                user_id, 
+                access_token, 
+                reply_text, 
+                image_url=reply_image, 
+                reply_to_id=last_post_id
+            )
+            
             if cont_id:
                 pub_id = _publish_container(user_id, access_token, cont_id)
                 if pub_id:

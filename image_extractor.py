@@ -135,3 +135,58 @@ def validate_image_url(url: str) -> bool:
         return content_type.startswith("image/")
     except Exception:
         return False
+
+
+def get_all_images(url: str) -> list[str]:
+    """
+    Extract all relevant images from the article body.
+    
+    Args:
+        url: The article URL.
+        
+    Returns:
+        List of image URLs found in the article body.
+    """
+    try:
+        response = requests.get(
+            url,
+            headers=DEFAULT_HEADERS,
+            timeout=REQUEST_TIMEOUT
+        )
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.content, "html.parser")
+        images = []
+        
+        # 1. Add og:image as the first image (High Priority)
+        og_image = soup.find("meta", property="og:image")
+        if og_image and og_image.get("content"):
+            images.append(og_image["content"])
+            
+        # 2. Find article body images
+        # Common article containers: 'article', 'main', '.content', '.post'
+        article_body = soup.find("article") or soup.find("main") or soup.find("div", class_="content")
+        
+        if article_body:
+            img_tags = article_body.find_all("img")
+            for img in img_tags:
+                src = img.get("src")
+                if not src:
+                    continue
+                    
+                # Filter out small icons, ads, spacers
+                # This is a heuristic; might need tuning based on specific sites
+                if "icon" in src or "logo" in src or "avatar" in src:
+                    continue
+                if ".svg" in src: # Skip SVGs usually used for icons
+                    continue
+                    
+                if src not in images:
+                    images.append(src)
+        
+        # Limit to 5 images to avoid spamming
+        return images[:5]
+        
+    except Exception as e:
+        print(f"⚠️ 이미지 일괄 추출 실패: {e}")
+        return []

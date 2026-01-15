@@ -29,7 +29,7 @@ from rss_collector import (
     get_entry_info,
     DEFAULT_RSS_SOURCES
 )
-from image_extractor import get_article_image
+from image_extractor import get_all_images
 from ai_analyzer import (
     create_client,
     generate_thread_content,
@@ -58,7 +58,7 @@ def get_api_key() -> Optional[str]:
 
 
 
-def save_archive(content: dict, image_url: Optional[str], source_url: str) -> None:
+def save_archive(content: dict, image_urls: list[str], source_url: str) -> None:
     """
     Save the generated content to an archive Markdown file.
     File name format: archive/YYYY-MM-DD.md
@@ -75,19 +75,22 @@ def save_archive(content: dict, image_url: Optional[str], source_url: str) -> No
         # Title
         f.write(f"# Thread-Auto Archive: {date_str}\n\n")
         
-        # Image
-        if image_url:
-            f.write(f"![Article Image]({image_url})\n\n")
-            
-        # Main Post
+        # Main Post & Image[0]
         f.write("## Main Post\n")
+        if len(image_urls) > 0:
+            f.write(f"![Main Image]({image_urls[0]})\n\n")
         f.write(f"{content.get('main_post', '')}\n\n")
         
-        # Replies
+        # Replies & Distributed Images
         if content.get("type") == "multi":
             f.write("## Replies\n")
             for i, reply in enumerate(content.get("replies", [])):
                 f.write(f"### Reply {i+1}\n")
+                
+                # Check for Image i+1
+                if len(image_urls) > i + 1:
+                    f.write(f"![Reply Image {i+1}]({image_urls[i+1]})\n\n")
+                    
                 f.write(f"{reply}\n\n")
                 
         # Source
@@ -145,13 +148,16 @@ def run_pipeline() -> None:
     info = get_entry_info(entry)
     print(f"✅ 최신 글 발견: {info['title']}")
 
-    # Step 2: Extract image
+    # Step 2: Extract Images
     print(f"\n🔄 [Step 2] 이미지 추출 중...")
-    image_url = get_article_image(info["link"])
-    if image_url:
-        print(f"✅ 이미지 URL: {image_url[:60]}...")
+    image_urls = get_all_images(info["link"])
+    
+    if image_urls:
+        print(f"✅ 이미지 {len(image_urls)}장 발견")
+        print(f"   대표 이미지: {image_urls[0][:60]}...")
     else:
         print("⚠️ 이미지 없음 (텍스트만 게시)")
+        image_urls = []
         
     # Step 2.5: Fetch Full Article Content
     print(f"\n🔄 [Step 2.5] 기사 본문 스크래핑 중...")
@@ -169,18 +175,22 @@ def run_pipeline() -> None:
     print(f"   Provider: {AI_PROVIDER}, Model: {model}")
 
     try:
-        client = create_client(api_key, AI_PROVIDER, model)
+        client = create_client(
+            api_key=api_key,
+            provider=AI_PROVIDER,
+            model=model
+        )
         content = generate_thread_content(
             client,
             info["title"],
             full_content
         )
     except Exception as e:
-        print(f"❌ AI 클라이언트 생성 실패: {e}")
+        print(f"❌ AI 분석 실패: {e}")
         return
 
     if not content or not validate_content(content):
-        print("❌ AI 콘텐츠 생성 실패")
+        print("❌ 유효하지 않은 AI 응답")
         return
 
     print(f"✅ 콘텐츠 생성 완료 (타입: {content['type']})")
@@ -189,13 +199,16 @@ def run_pipeline() -> None:
     print(f"\n🔄 [Step 4] 출력 처리 중...")
     if DRY_RUN:
         print("   모드: DRY RUN (테스트)")
-        print_dry_run(content, image_url, info["link"])
+        print_dry_run(content, image_urls, info["link"])
     else:
         print("   모드: PRODUCTION")
-        if THREADS_ACCESS_TOKEN:
+        if not THREADS_ACCESS_TOKEN:
+            print("❌ THREADS_ACCESS_TOKEN이 없습니다. Dry Run으로 대체합니다.")
+            print_dry_run(content, image_urls, info["link"])
+        else:
             success = post_to_threads(
                 content,
-                image_url,
+                image_urls,
                 info["link"],
                 THREADS_ACCESS_TOKEN
             )
@@ -203,12 +216,10 @@ def run_pipeline() -> None:
                 print("✅ Threads에 게시 완료!")
             else:
                 print("❌ Threads 게시 실패")
-        else:
-            print("❌ THREADS_ACCESS_TOKEN이 설정되지 않았습니다.")
             
     # Step 5: Archive
     print(f"\n🔄 [Step 5] 아카이빙 중...")
-    save_archive(content, image_url, info["link"])
+    save_archive(content, image_urls, info["link"])
 
     print("\n" + "#" * 50)
     print("# PIPELINE 완료")
