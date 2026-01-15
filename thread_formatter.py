@@ -36,9 +36,15 @@ def print_dry_run(
     print(f"📢 [DRY RUN] 게시물 타입: {data.get('type', 'unknown').upper()}")
     print(separator)
 
-    # Main post (Image 0)
+    # Main post
     print(f"\n[1] 메인 포스트")
-    if len(image_urls) > 0:
+    
+    # Single Post + Multiple Images = Carousel Logic
+    if data.get("type", "single") == "single" and len(image_urls) > 1:
+        print(f"    🎠 [Carousel Mode] 총 {len(image_urls)}장의 이미지 포함")
+        for i, url in enumerate(image_urls):
+             print(f"    - 이미지[{i}]: {url[:60]}...")
+    elif len(image_urls) > 0:
         print(f"    🖼️ 이미지[0]: {image_urls[0][:60]}...")
     else:
         print("    🖼️ 이미지: 없음")
@@ -74,25 +80,41 @@ THREADS_API_BASE = "https://graph.threads.net/v1.0"
 def _create_container(
     user_id: str,
     access_token: str,
-    text: str,
+    text: str = "",
     image_url: Optional[str] = None,
-    reply_to_id: Optional[str] = None
+    reply_to_id: Optional[str] = None,
+    # Carousel specific args
+    is_carousel_item: bool = False,
+    children: Optional[list[str]] = None 
 ) -> Optional[str]:
     """
-    Create a Threads media container.
+    Create a Threads media container. Supports Text, Image, and Carousel.
     """
     url = f"{THREADS_API_BASE}/{user_id}/threads"
     params = {
         "access_token": access_token,
-        "media_type": "IMAGE" if image_url else "TEXT",
-        "text": text
     }
-    
-    if image_url:
+
+    if is_carousel_item:
+        params["media_type"] = "IMAGE"
         params["image_url"] = image_url
-        
-    if reply_to_id:
-        params["reply_to_id"] = reply_to_id
+        params["is_carousel_item"] = "true"
+        # Carousel items don't have text or reply_to_id directly usually, 
+        # but Threads API might allow text on the parent carousel container.
+    elif children:
+        params["media_type"] = "CAROUSEL"
+        params["children"] = ",".join(children)
+        params["text"] = text
+        if reply_to_id:
+            params["reply_to_id"] = reply_to_id
+    else:
+        # Standard Single Post (Image or Text)
+        params["media_type"] = "IMAGE" if image_url else "TEXT"
+        params["text"] = text
+        if image_url:
+            params["image_url"] = image_url
+        if reply_to_id:
+            params["reply_to_id"] = reply_to_id
         
     try:
         response = requests.post(url, params=params)
@@ -150,12 +172,34 @@ def post_to_threads(
         print(f"❌ 사용자 정보 조회 실패: {e}")
         return False
 
-    # 2. Main Post (Image 0)
+    # 2. Main Post
     main_text = data.get("main_post", "")
-    main_image = image_urls[0] if len(image_urls) > 0 else None
     
-    # Create Container
-    container_id = _create_container(user_id, access_token, main_text, main_image)
+    container_id = None
+    
+    # Check if Single Post AND Multiple Images -> Use Carousel
+    if data.get("type", "single") == "single" and len(image_urls) > 1:
+        print(f"   🎠 단일 포스트 + 다중 이미지({len(image_urls)}장) -> 캐러셀 생성")
+        
+        # 2-1. Create Item Containers
+        item_ids = []
+        for img_url in image_urls:
+            # Create Carousel Item
+            item_id = _create_container(user_id, access_token, is_carousel_item=True, image_url=img_url)
+            if item_id:
+                item_ids.append(item_id)
+            else:
+                print(f"   ⚠️ 캐러셀 아이템 생성 실패: {img_url}")
+        
+        if len(item_ids) > 0:
+            # 2-2. Create Carousel Container
+            container_id = _create_container(user_id, access_token, text=main_text, children=item_ids)
+    
+    else:
+        # Standard Single Image or Text
+        main_image = image_urls[0] if len(image_urls) > 0 else None
+        container_id = _create_container(user_id, access_token, text=main_text, image_url=main_image)
+    
     if not container_id:
         return False
         

@@ -82,12 +82,18 @@ def save_archive(content: dict, image_urls: list[str], source_url: str, title: s
         if match:
             raw_title = match.group(1).strip()
         else:
-            # Fallback: take first few words if no bracket title
+            # Fallback: take first sentence or max 30 chars
             first_line = main_text.split("\n")[0]
-            clean_line = re.sub(r'[\*\[\]]', '', first_line).strip()
-            if clean_line:
-                raw_title = clean_line
-
+            # Split by sentence delimiters
+            sentence_match = re.split(r'[.!?]', first_line)
+            if sentence_match:
+                raw_title = sentence_match[0].strip()
+            else:
+                raw_title = first_line.strip()
+            
+            # Remove MD formatting like bold
+            raw_title = re.sub(r'\*\*', '', raw_title)
+            
     # Keep Korean, alphanumeric, spaces, hyphens.
     # Korean Unicode range: \uAC00-\uD7A3
     # User requested NO underscores. We will use spaces.
@@ -96,8 +102,8 @@ def save_archive(content: dict, image_urls: list[str], source_url: str, title: s
     safe_title = re.sub(r'\s+', ' ', safe_title).strip()
     
     # Limit length
-    if len(safe_title) > 50:
-        safe_title = safe_title[:50]
+    if len(safe_title) > 30: # Stricter limit for fallback cases
+        safe_title = safe_title[:30].strip()
     
     if not safe_title:
         safe_title = "Untitled_Article"
