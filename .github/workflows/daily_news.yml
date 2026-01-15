@@ -1,0 +1,43 @@
+name: Thread-Auto Daily Run
+
+on:
+  schedule:
+    # 매일 한국 시간 오전 9시 (UTC 00:00) 실행
+    - cron: '0 0 * * *'
+  workflow_dispatch: # 수동 실행 버튼 (테스트용)
+
+jobs:
+  thread-auto-pipeline:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 리포지토리 체크아웃
+      uses: actions/checkout@v4
+
+    - name: 🐍 Python 설정 (3.10)
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        cache: 'pip'
+
+    - name: 📦 라이브러리 설치
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: 🚀 Thread-Auto 파이프라인 실행
+      env:
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
+        RSS_URL: ${{ vars.RSS_URL || 'https://techcrunch.com/feed/' }}
+        DRY_RUN: ${{ vars.DRY_RUN || 'true' }}
+      run: python main.py
+
+    - name: 📊 실행 결과 요약
+      if: always()
+      run: |
+        echo "## Thread-Auto 실행 완료" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- 실행 시간: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+        echo "- RSS URL: $RSS_URL" >> $GITHUB_STEP_SUMMARY
+        echo "- DRY_RUN 모드: $DRY_RUN" >> $GITHUB_STEP_SUMMARY
