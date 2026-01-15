@@ -209,19 +209,33 @@ def _create_gemini_client(api_key: str, model: str):
 
 def analyze_article(client: Dict, text: str) -> Optional[Dict]:
     """
-    Step 1: Extract core facts and insights from raw text.
+    Step 1: Extract core facts, numbers, and context from raw text.
     """
     system_prompt = """
-    You are a Tech Analyst. Analyze the provided news text and extract:
-    1. **Key Facts**: 3-5 critical numbers, names, or technical specs.
-    2. **Background**: Why this matters? (Context)
-    3. **Impact**: Technical or market implication.
+    You are an Expert Tech Analyst (News Desk).
+    Your goal is to extract **ALL** relevant information from the text to brief the Chief Editor.
+    
+    [Extraction Rules]
+    1. **Who**: Identify key companies and **what they do** (e.g., Varaha -> Indian Carbon Removal Startup).
+    2. **Numbers**: Extract ALL specific numbers (dates, tons, dollars, people count, percentage).
+    3. **Mechanism**: How does the technology work? (e.g., Biochar, Pyrolysis).
+    4. **Context**: Why is this significant? (e.g., First in Asia, part of 2030 goal).
+    
+    [Language Rule]
+    - **TRANSLATE EVERYTHING TO KOREAN**.
+    - Do NOT use Chinese characters (漢字) or other foreign languages.
+    - Use clear, professional Korean.
     
     Output JSON:
     {
-        "facts": ["fact1", "fact2", ...],
-        "background": "...",
-        "impact": "..."
+        "facts": [
+            "Fact 1 (Context + Number)",
+            "Fact 2 (Technology detail)",
+            "Fact 3 (Significance)",
+            ... extract at least 7-10 distinct points ...
+        ],
+        "keywords": ["Company A (Description)", "Technology B"],
+        "impact": "One sentence summary of market impact"
     }
     """
     
@@ -237,7 +251,6 @@ def analyze_article(client: Dict, text: str) -> Optional[Dict]:
             )
             return json.loads(response.choices[0].message.content)
         elif client["type"] == "gemini":
-             # Simple generation for now
              response = client["client"].generate_content(system_prompt + "\n\n" + text)
              return json.loads(response.text)
         elif client["type"] == "requests":
@@ -255,18 +268,18 @@ def write_thread_from_analysis(client: Dict, analysis: Dict, original_title: str
     user_prompt = f"""
     [뉴스 제목]: {original_title}
     
-    [분석된 핵심 내용]:
-    - Facts: {analysis.get('facts')}
-    - Background: {analysis.get('background')}
-    - Impact: {analysis.get('impact')}
+    [분석된 핵심 데이터]:
+    - Keywords (Who/What): {analysis.get('keywords')}
+    - Detailed Facts: {json.dumps(analysis.get('facts'), ensure_ascii=False)}
+    - Market Impact: {analysis.get('impact')}
     
-    위 내용을 바탕으로 'Next Builder' 작문 공식(4-Step Structure)에 맞춰 글을 작성해줘.
+    위 '핵심 데이터'를 빠짐없이 활용하여 'Next Builder' 작문 공식에 맞춰 글을 작성해줘.
     
     ⚠️ **필수 주의사항**:
-    1. **소제목**: `**[제목]**` (굵게)
-    2. **Hook(도입부)**: 반드시 "**~네요**" 또는 "**~군요**" 처럼 동료에게 말하듯 부드럽게 시작할 것.
-       (예: "드디어 해냈군요.", "흥미로운 소식이네요.")
-    3. **Body(본문)**: 그 뒤에는 "**~습니다**" 체로 기술적 팩트 전달.
+    1. **제목**: 대상이 모호하지 않게 수식어를 붙일 것. (예: "Varaha" (X) -> "인도 기후 스타트업 Varaha" (O))
+    2. **내용**: 위 'Detailed Facts'에 있는 구체적인 숫자(돈, 톤, 년도, 인원수)를 본문에 반드시 녹여낼 것. 뭉뚱그리지 말 것.
+    3. **Hook**: "흥미롭군요", "~네요" 등 구어체로 시작.
+    4. **언어**: 무조건 자연스러운 '한국어'로 작성. (한자, 외국어 혼용 절대 금지)
     """
     
     try:
