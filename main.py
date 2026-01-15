@@ -152,6 +152,17 @@ def run_pipeline() -> None:
         print(f"✅ 이미지 URL: {image_url[:60]}...")
     else:
         print("⚠️ 이미지 없음 (텍스트만 게시)")
+        
+    # Step 2.5: Fetch Full Article Content
+    print(f"\n🔄 [Step 2.5] 기사 본문 스크래핑 중...")
+    from rss_collector import fetch_article_content
+    full_content = fetch_article_content(info["link"])
+    
+    if full_content:
+        print(f"✅ 본문 추출 성공 ({len(full_content)}자)")
+    else:
+        print("⚠️ 본문 추출 실패, 요약문으로 대체합니다.")
+        full_content = info["description"]
 
     # Step 3: AI Analysis
     print(f"\n🔄 [Step 3] AI 분석 시작...")
@@ -162,7 +173,7 @@ def run_pipeline() -> None:
         content = generate_thread_content(
             client,
             info["title"],
-            info["description"]
+            full_content
         )
     except Exception as e:
         print(f"❌ AI 클라이언트 생성 실패: {e}")

@@ -109,3 +109,45 @@ def get_entry_info(entry: Dict[str, Any]) -> Dict[str, str]:
         "description": entry.get("summary", entry.get("description", "")),
         "published": entry.get("published", ""),
     }
+
+def fetch_article_content(url: str) -> str:
+    """
+    Fetch the full article content from the URL.
+    
+    Args:
+        url: The article URL.
+        
+    Returns:
+        The extracted text content of the article.
+    """
+    import requests
+    from bs4 import BeautifulSoup
+    
+    try:
+        # User-Agent header is often required to avoid 403 Forbidden
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.text, "html.parser")
+        
+        # Remove script and style elements
+        for script in soup(["script", "style", "nav", "footer", "header"]):
+            script.decompose()
+            
+        # Extract text from p tags (most common for articles)
+        paragraphs = soup.find_all("p")
+        text_content = "\n\n".join([p.get_text().strip() for p in paragraphs if len(p.get_text().strip()) > 20])
+        
+        # Fallback if content is too short
+        if len(text_content) < 200:
+            return "본문 추출 실패: 내용이 너무 짧습니다."
+            
+        return text_content[:4000]  # Limit context length for AI
+        
+    except Exception as e:
+        print(f"⚠️ 본문 스크래핑 실패 ({url}): {e}")
+        return ""
+
