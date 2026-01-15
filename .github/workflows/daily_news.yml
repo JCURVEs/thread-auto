@@ -5,6 +5,15 @@ on:
     # 매일 한국 시간 오전 9시 (UTC 00:00) 실행
     - cron: '0 0 * * *'
   workflow_dispatch: # 수동 실행 버튼 (테스트용)
+    inputs:
+      ai_provider:
+        description: 'AI Provider (groq, openrouter, gemini)'
+        required: false
+        default: 'groq'
+      dry_run:
+        description: 'Dry Run Mode (true/false)'
+        required: false
+        default: 'true'
 
 jobs:
   thread-auto-pipeline:
@@ -27,10 +36,21 @@ jobs:
 
     - name: 🚀 Thread-Auto 파이프라인 실행
       env:
-        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        # AI Provider 설정 (기본: Groq - 무료, 빠름)
+        AI_PROVIDER: ${{ github.event.inputs.ai_provider || 'groq' }}
+        AI_MODEL: ${{ vars.AI_MODEL || '' }}
+        
+        # API Keys (GitHub Secrets에 등록)
+        GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        
+        # Threads 설정
         THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
+        
+        # RSS 및 실행 모드
         RSS_URL: ${{ vars.RSS_URL || 'https://techcrunch.com/feed/' }}
-        DRY_RUN: ${{ vars.DRY_RUN || 'true' }}
+        DRY_RUN: ${{ github.event.inputs.dry_run || vars.DRY_RUN || 'true' }}
       run: python main.py
 
     - name: 📊 실행 결과 요약
@@ -39,5 +59,5 @@ jobs:
         echo "## Thread-Auto 실행 완료" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "- 실행 시간: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
-        echo "- RSS URL: $RSS_URL" >> $GITHUB_STEP_SUMMARY
-        echo "- DRY_RUN 모드: $DRY_RUN" >> $GITHUB_STEP_SUMMARY
+        echo "- AI Provider: ${{ github.event.inputs.ai_provider || 'groq' }}" >> $GITHUB_STEP_SUMMARY
+        echo "- DRY_RUN 모드: ${{ github.event.inputs.dry_run || vars.DRY_RUN || 'true' }}" >> $GITHUB_STEP_SUMMARY

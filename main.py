@@ -4,12 +4,20 @@ Thread-Auto: AI-powered Tech News Pipeline for Meta Threads.
 This is the main entry point for the Thread-Auto pipeline.
 It orchestrates RSS collection, AI analysis, and content formatting.
 
-Usage:
-    # Dry Run (default)
-    python main.py
+Supports multiple FREE AI providers:
+- Groq (default, fastest, 14K req/day)
+- OpenRouter (Qwen, 400+ models)
+- Gemini (Google, 1.5K req/day)
 
-    # With environment variables
-    OPENAI_API_KEY=sk-... DRY_RUN=True python main.py
+Usage:
+    # Groq (default, recommended)
+    GROQ_API_KEY=gsk-... python main.py
+
+    # OpenRouter
+    AI_PROVIDER=openrouter OPENROUTER_API_KEY=sk-or-... python main.py
+
+    # Gemini
+    AI_PROVIDER=gemini GEMINI_API_KEY=AIza... python main.py
 """
 
 import os
@@ -22,15 +30,31 @@ from rss_collector import (
     DEFAULT_RSS_SOURCES
 )
 from image_extractor import get_article_image
-from ai_analyzer import create_client, generate_thread_content, validate_content
+from ai_analyzer import (
+    create_client,
+    generate_thread_content,
+    validate_content,
+    get_provider_info,
+    PROVIDERS,
+    DEFAULT_PROVIDER
+)
 from thread_formatter import print_dry_run, post_to_threads
 
 
 # --- Configuration ---
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+AI_PROVIDER = os.environ.get("AI_PROVIDER", DEFAULT_PROVIDER)
+AI_MODEL = os.environ.get("AI_MODEL", None)  # None = 제공자 기본 모델 사용
 THREADS_ACCESS_TOKEN = os.environ.get("THREADS_ACCESS_TOKEN")
 RSS_URL = os.environ.get("RSS_URL", DEFAULT_RSS_SOURCES["techcrunch"])
 DRY_RUN = os.environ.get("DRY_RUN", "True").lower() in ("true", "1", "yes")
+
+
+def get_api_key() -> Optional[str]:
+    """Get API key for the configured provider."""
+    config = PROVIDERS.get(AI_PROVIDER)
+    if not config:
+        return None
+    return os.environ.get(config["env_key"])
 
 
 def run_pipeline() -> None:
@@ -40,18 +64,28 @@ def run_pipeline() -> None:
     Pipeline steps:
     1. Fetch latest news from RSS feed
     2. Extract og:image from article
-    3. Analyze content with GPT-4o
+    3. Analyze content with AI (Groq/OpenRouter/Gemini)
     4. Format and output (Dry Run or Production)
     """
     print("\n" + "#" * 50)
     print("# THREAD-AUTO PIPELINE")
+    print(f"# AI Provider: {AI_PROVIDER.upper()}")
     print("#" * 50)
 
     # Validate API key
-    if not OPENAI_API_KEY:
-        print("❌ OPENAI_API_KEY 환경 변수가 설정되지 않았습니다.")
-        print("   export OPENAI_API_KEY='sk-...'")
+    api_key = get_api_key()
+    if not api_key:
+        config = PROVIDERS.get(AI_PROVIDER, {})
+        env_key = config.get("env_key", "API_KEY")
+        print(f"❌ {env_key} 환경 변수가 설정되지 않았습니다.")
+        print(f"\n{get_provider_info()}")
         return
+
+    provider_config = PROVIDERS.get(AI_PROVIDER)
+    model = AI_MODEL or provider_config["default_model"]
+    print(f"# Model: {model}")
+    print(f"# Free Limit: {provider_config['free_limit']}")
+    print("#" * 50)
 
     # Step 1: Fetch RSS feed
     print(f"\n🔄 [Step 1] RSS 피드 확인 중...")
@@ -80,12 +114,18 @@ def run_pipeline() -> None:
 
     # Step 3: AI Analysis
     print(f"\n🔄 [Step 3] AI 분석 시작...")
-    client = create_client(OPENAI_API_KEY)
-    content = generate_thread_content(
-        client,
-        info["title"],
-        info["description"]
-    )
+    print(f"   Provider: {AI_PROVIDER}, Model: {model}")
+
+    try:
+        client = create_client(api_key, AI_PROVIDER, model)
+        content = generate_thread_content(
+            client,
+            info["title"],
+            info["description"]
+        )
+    except Exception as e:
+        print(f"❌ AI 클라이언트 생성 실패: {e}")
+        return
 
     if not content or not validate_content(content):
         print("❌ AI 콘텐츠 생성 실패")
@@ -119,45 +159,9 @@ def run_pipeline() -> None:
     print("#" * 50 + "\n")
 
 
-def example_rss_collector() -> None:
-    """
-    Demonstrate RSS collector functionality.
-    """
-    print("\n" + "=" * 50)
-    print("RSS COLLECTOR 예제")
-    print("=" * 50)
-
-    for name, url in list(DEFAULT_RSS_SOURCES.items())[:2]:
-        print(f"\n📰 {name.upper()}: {url}")
-        feed = fetch_feed(url)
-        if feed:
-            entry = get_latest_entry(feed)
-            if entry:
-                info = get_entry_info(entry)
-                print(f"   제목: {info['title'][:50]}...")
-                print(f"   링크: {info['link'][:50]}...")
-
-
-def example_image_extractor() -> None:
-    """
-    Demonstrate image extractor functionality.
-    """
-    print("\n" + "=" * 50)
-    print("IMAGE EXTRACTOR 예제")
-    print("=" * 50)
-
-    test_urls = [
-        "https://techcrunch.com/",
-        "https://www.theverge.com/",
-    ]
-
-    for url in test_urls:
-        print(f"\n🔗 URL: {url}")
-        image = get_article_image(url)
-        if image:
-            print(f"   🖼️ 이미지: {image[:60]}...")
-        else:
-            print("   ⚠️ 이미지 없음")
+def show_providers() -> None:
+    """Display available AI providers information."""
+    print(get_provider_info())
 
 
 def main() -> None:
