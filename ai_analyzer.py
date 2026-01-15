@@ -104,13 +104,13 @@ PROVIDERS = {
     # Gemini: 일 1,500회 무료
     "gemini": {
         "base_url": None,  # Uses native SDK
-        "default_model": "gemini-1.5-flash",
+        "default_model": "gemini-flash-latest", # '3.0' 등 최신 Flash 모델 자동 매핑
         "env_key": "GEMINI_API_KEY",
         "free_limit": "1,500 req/day, 15 req/min",
         "models": [
-            "gemini-1.5-flash",    # 빠름, 무료 추천
-            "gemini-1.5-pro",      # 강력, 일 50회
-            "gemini-2.0-flash",    # 최신
+            "gemini-flash-latest",
+            "gemini-2.0-flash-exp",
+            "gemini-1.5-pro",
         ]
     },
 }
@@ -226,6 +226,9 @@ def analyze_article(client: Dict, text: str) -> Optional[Dict]:
     - Do NOT use Chinese characters (漢字) or other foreign languages.
     - Use clear, professional Korean.
     
+    [Format]
+    Return **ONLY valid JSON**. No Markdown code blocks (```json ... ```).
+    
     Output JSON:
     {
         "facts": [
@@ -251,13 +254,28 @@ def analyze_article(client: Dict, text: str) -> Optional[Dict]:
             )
             return json.loads(response.choices[0].message.content)
         elif client["type"] == "gemini":
-             response = client["client"].generate_content(system_prompt + "\n\n" + text)
-             return json.loads(response.text)
+             safety_settings = [
+                {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+            ]
+             response = client["client"].generate_content(
+                system_prompt + "\n\n" + text,
+                safety_settings=safety_settings
+             )
+             raw_text = response.text.replace("```json", "").replace("```", "").strip()
+             return json.loads(raw_text)
         elif client["type"] == "requests":
             return _generate_requests_custom(client, system_prompt, text)
             
     except Exception as e:
         print(f"❌ 분석 단계 실패: {e}")
+        # Debug: Print raw response if available
+        if 'response' in locals() and hasattr(response, 'text'):
+            print(f"🔍 Raw Gemini Output: {response.text[:200]}...")
+        if 'response' in locals() and hasattr(response, 'choices'):
+             print(f"🔍 Raw OpenAI/Groq Output: {response.choices[0].message.content[:200]}...")
         return None
 
 def write_thread_from_analysis(client: Dict, analysis: Dict, original_title: str) -> Optional[Dict]:
