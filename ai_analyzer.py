@@ -207,55 +207,98 @@ def _create_gemini_client(api_key: str, model: str):
         raise ImportError("google-generativeai 패키지가 필요합니다.")
 
 
-def generate_thread_content(
-    client: Dict,
-    title: str,
-    description: str
-) -> Optional[Dict[str, Any]]:
+def analyze_article(client: Dict, text: str) -> Optional[Dict]:
     """
-    Generate thread content from news title and description.
-
-    Args:
-        client: Client dictionary from create_client().
-        title: News article title.
-        description: News article description/summary.
-
-    Returns:
-        Dictionary with type, main_post, and replies.
+    Step 1: Extract core facts and insights from raw text.
     """
-    user_prompt = f"뉴스 제목: {title}\n\n뉴스 내용:\n{description}"
-
+    system_prompt = """
+    You are a Tech Analyst. Analyze the provided news text and extract:
+    1. **Key Facts**: 3-5 critical numbers, names, or technical specs.
+    2. **Background**: Why this matters? (Context)
+    3. **Impact**: Technical or market implication.
+    
+    Output JSON:
+    {
+        "facts": ["fact1", "fact2", ...],
+        "background": "...",
+        "impact": "..."
+    }
+    """
+    
     try:
         if client["type"] == "openai":
-            return _generate_openai(client, user_prompt)
+            response = client["client"].chat.completions.create(
+                model=client["model"],
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": text}
+                ],
+                response_format={"type": "json_object"}
+            )
+            return json.loads(response.choices[0].message.content)
         elif client["type"] == "gemini":
-            return _generate_gemini(client, user_prompt)
+             # Simple generation for now
+             response = client["client"].generate_content(system_prompt + "\n\n" + text)
+             return json.loads(response.text)
         elif client["type"] == "requests":
-            return _generate_requests(client, user_prompt)
+            return _generate_requests_custom(client, system_prompt, text)
+            
     except Exception as e:
-        print(f"❌ AI 분석 실패: {e}")
+        print(f"❌ 분석 단계 실패: {e}")
         return None
 
+def write_thread_from_analysis(client: Dict, analysis: Dict, original_title: str) -> Optional[Dict]:
+    """
+    Step 2: Write specific Thread content using the 'Next Builder' persona.
+    """
+    # Use the existing SYSTEM_PROMPT which contains the Next Builder Formula
+    user_prompt = f"""
+    [뉴스 제목]: {original_title}
+    
+    [분석된 핵심 내용]:
+    - Facts: {analysis.get('facts')}
+    - Background: {analysis.get('background')}
+    - Impact: {analysis.get('impact')}
+    
+    위 내용을 바탕으로 'Next Builder' 작문 공식(4-Step Structure)에 맞춰 글을 작성해줘.
+    
+    ⚠️ **필수 주의사항**:
+    1. **소제목**: `**[제목]**` (굵게)
+    2. **Hook(도입부)**: 반드시 "**~네요**" 또는 "**~군요**" 처럼 동료에게 말하듯 부드럽게 시작할 것.
+       (예: "드디어 해냈군요.", "흥미로운 소식이네요.")
+    3. **Body(본문)**: 그 뒤에는 "**~습니다**" 체로 기술적 팩트 전달.
+    """
+    
+    try:
+         if client["type"] == "openai":
+            response = client["client"].chat.completions.create(
+                model=client["model"],
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt}
+                ],
+                response_format={"type": "json_object"}
+            )
+            return json.loads(response.choices[0].message.content)
+         # ... (implement other providers similarly) ...
+         return _generate_openai(client, user_prompt) # reuse existing wrapper for simplicity
+         
+    except Exception as e:
+        print(f"❌ 작문 단계 실패: {e}")
+        return None
 
-def _generate_openai(client: Dict, user_prompt: str) -> Optional[Dict]:
-    """Generate using OpenAI-compatible API."""
-    response = client["client"].chat.completions.create(
-        model=client["model"],
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt}
-        ],
-        response_format={"type": "json_object"},
-        temperature=0.7,
-        max_tokens=1000
-    )
-    return json.loads(response.choices[0].message.content)
+def _generate_requests_custom(client: Dict, sys_prompt: str, user_prompt: str) -> Optional[Dict]:
+    import requests
+    headers = {"Authorization": f"Bearer {client['api_key']}", "Content-Type": "application/json"}
+    data = {
+        "model": client["model"],
+        "messages": [{"role": "system", "content": sys_prompt}, {"role": "user", "content": user_prompt}],
+        "response_format": {"type": "json_object"},
+        "temperature": 0.5
+    }
+    res = requests.post(f"{client['base_url']}/chat/completions", headers=headers, json=data)
+    return json.loads(res.json()["choices"][0]["message"]["content"])
 
-
-def _generate_gemini(client: Dict, user_prompt: str) -> Optional[Dict]:
-    """Generate using Gemini API."""
-    response = client["client"].generate_content(user_prompt)
-    return json.loads(response.text)
 
 
 def _generate_requests(client: Dict, user_prompt: str) -> Optional[Dict]:

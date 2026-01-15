@@ -32,7 +32,8 @@ from rss_collector import (
 from image_extractor import get_all_images
 from ai_analyzer import (
     create_client,
-    generate_thread_content,
+    analyze_article,
+    write_thread_from_analysis,
     validate_content,
     get_provider_info,
     PROVIDERS,
@@ -217,8 +218,8 @@ def run_pipeline() -> None:
         print("⚠️ 본문 추출 실패, 요약문으로 대체합니다.")
         full_content = info["description"]
 
-    # Step 3: AI Analysis
-    print(f"\n🔄 [Step 3] AI 분석 시작...")
+    # Step 3: AI Analysis (2-Step)
+    print(f"\n🔄 [Step 3.1] 핵심 내용 분석 중... (Fact Extraction)")
     print(f"   Provider: {AI_PROVIDER}, Model: {model}")
 
     try:
@@ -227,13 +228,22 @@ def run_pipeline() -> None:
             provider=AI_PROVIDER,
             model=model
         )
-        content = generate_thread_content(
-            client,
-            info["title"],
-            full_content
-        )
+        
+        # 1. Analyze
+        analysis = analyze_article(client, full_content)
+        if not analysis:
+            print("❌ 분석 실패")
+            return
+            
+        print(f"   ✅ 분석 완료: {len(analysis.get('facts', []))}개 팩트 추출")
+        print(f"   💡 Impact: {analysis.get('impact')[:50]}...")
+        
+        # 2. Write
+        print(f"\n🔄 [Step 3.2] 'Next Builder' 스타일로 작성 중...")
+        content = write_thread_from_analysis(client, analysis, info["title"])
+        
     except Exception as e:
-        print(f"❌ AI 분석 실패: {e}")
+        print(f"❌ AI 처리 실패: {e}")
         return
 
     if not content or not validate_content(content):
