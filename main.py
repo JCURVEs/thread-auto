@@ -58,22 +58,34 @@ def get_api_key() -> Optional[str]:
 
 
 
-def save_archive(content: dict, image_urls: list[str], source_url: str) -> None:
+def save_archive(content: dict, image_urls: list[str], source_url: str, title: str) -> None:
     """
     Save the generated content to an archive Markdown file.
-    File name format: archive/YYYY-MM-DD.md
+    Directory format: archive/YYYY-MM-DD/
+    File name format: Sanitize_Title.md
     """
     import datetime
+    import re
     
     date_str = datetime.datetime.now().strftime("%Y-%m-%d")
-    archive_dir = "archive"
-    os.makedirs(archive_dir, exist_ok=True)
+    # Create directory for the day
+    daily_archive_dir = os.path.join("archive", date_str)
+    os.makedirs(daily_archive_dir, exist_ok=True)
     
-    file_path = os.path.join(archive_dir, f"{date_str}.md")
+    # Sanitize title for filename
+    # Keep alphanumeric, spaces, hyphens, underscores. Remove others.
+    safe_title = re.sub(r'[^a-zA-Z0-9\s\-_]', '', title)
+    # Replace spaces with underscores
+    safe_title = re.sub(r'\s+', '_', safe_title).strip()
+    
+    if not safe_title:
+        safe_title = "Untitled_Article"
+        
+    file_path = os.path.join(daily_archive_dir, f"{safe_title}.md")
     
     with open(file_path, "w", encoding="utf-8") as f:
         # Title
-        f.write(f"# Thread-Auto Archive: {date_str}\n\n")
+        f.write(f"# {title}\n\n")
         
         # Main Post & Image[0]
         f.write("## Main Post\n")
@@ -219,7 +231,7 @@ def run_pipeline() -> None:
             
     # Step 5: Archive
     print(f"\n🔄 [Step 5] 아카이빙 중...")
-    save_archive(content, image_urls, info["link"])
+    save_archive(content, image_urls, info["link"], info["title"])
 
     print("\n" + "#" * 50)
     print("# PIPELINE 완료")
