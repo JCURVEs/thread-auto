@@ -114,10 +114,18 @@ def save_archive(content: dict, image_urls: list[str], source_url: str, title: s
         # Title (Use the Korean extracted title)
         f.write(f"# {raw_title}\n\n")
         
-        # Main Post & Image[0]
+        # Main Post & Images
         f.write("## Main Post\n")
-        if len(image_urls) > 0:
+        
+        # If Single type, list ALL images (Carousel simulation)
+        if content.get("type") == "single":
+            for i, img_url in enumerate(image_urls):
+                f.write(f"![Image {i+1}]({img_url})\n")
+            f.write("\n")
+        # If Multi type, only first image here (others go to replies)
+        elif len(image_urls) > 0:
             f.write(f"![Main Image]({image_urls[0]})\n\n")
+            
         f.write(f"{content.get('main_post', '')}\n\n")
         
         # Replies & Distributed Images
