@@ -57,6 +57,46 @@ def get_api_key() -> Optional[str]:
     return os.environ.get(config["env_key"])
 
 
+
+def save_archive(content: dict, image_url: Optional[str], source_url: str) -> None:
+    """
+    Save the generated content to an archive Markdown file.
+    File name format: archive/YYYY-MM-DD.md
+    """
+    import datetime
+    
+    date_str = datetime.datetime.now().strftime("%Y-%m-%d")
+    archive_dir = "archive"
+    os.makedirs(archive_dir, exist_ok=True)
+    
+    file_path = os.path.join(archive_dir, f"{date_str}.md")
+    
+    with open(file_path, "w", encoding="utf-8") as f:
+        # Title
+        f.write(f"# Thread-Auto Archive: {date_str}\n\n")
+        
+        # Image
+        if image_url:
+            f.write(f"![Article Image]({image_url})\n\n")
+            
+        # Main Post
+        f.write("## Main Post\n")
+        f.write(f"{content.get('main_post', '')}\n\n")
+        
+        # Replies
+        if content.get("type") == "multi":
+            f.write("## Replies\n")
+            for i, reply in enumerate(content.get("replies", [])):
+                f.write(f"### Reply {i+1}\n")
+                f.write(f"{reply}\n\n")
+                
+        # Source
+        f.write("## Source\n")
+        f.write(f"Original Article: {source_url}\n")
+        
+    print(f"✅ 아카이브 저장 완료: {file_path}")
+
+
 def run_pipeline() -> None:
     """
     Execute the Thread-Auto pipeline.
@@ -66,6 +106,7 @@ def run_pipeline() -> None:
     2. Extract og:image from article
     3. Analyze content with AI (Groq/OpenRouter/Gemini)
     4. Format and output (Dry Run or Production)
+    5. Save Archive
     """
     print("\n" + "#" * 50)
     print("# THREAD-AUTO PIPELINE")
@@ -153,6 +194,10 @@ def run_pipeline() -> None:
                 print("❌ Threads 게시 실패")
         else:
             print("❌ THREADS_ACCESS_TOKEN이 설정되지 않았습니다.")
+            
+    # Step 5: Archive
+    print(f"\n🔄 [Step 5] 아카이빙 중...")
+    save_archive(content, image_url, info["link"])
 
     print("\n" + "#" * 50)
     print("# PIPELINE 완료")
@@ -165,6 +210,7 @@ def show_providers() -> None:
 
 
 def main() -> None:
+
     """
     Main entry point for Thread-Auto application.
     """

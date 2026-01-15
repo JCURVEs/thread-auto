@@ -61,3 +61,21 @@ jobs:
         echo "- 실행 시간: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
         echo "- AI Provider: ${{ github.event.inputs.ai_provider || 'groq' }}" >> $GITHUB_STEP_SUMMARY
         echo "- DRY_RUN 모드: ${{ github.event.inputs.dry_run || vars.DRY_RUN || 'true' }}" >> $GITHUB_STEP_SUMMARY
+
+    - name: 📂 아카이브 저장 (Commit & Push)
+      run: |
+        git config --global user.name "Thread-Auto Bot"
+        git config --global user.email "bot@noreply.github.com"
+        
+        # archive 디렉토리가 있을 때만 실행
+        if [ -d "archive" ]; then
+          git add archive/
+          # 변경사항이 있을 때만 커밋
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: update daily archive [skip ci]"
+            git push
+            echo "✅ 아카이브 업데이트 완료"
+          else
+             echo "ℹ️ 변경된 아카이브 파일이 없습니다."
+          fi
+        fi
