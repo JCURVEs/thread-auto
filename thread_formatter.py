@@ -2,7 +2,69 @@ import requests
 import time
 from typing import Dict, Any, Optional
 
+
+def format_output(
+    data: Dict[str, Any],
+    image_url: Optional[str],
+    source_url: str
+) -> Dict[str, Any]:
+    """
+    Format the AI-generated content into a structured output.
+    """
+    return {
+        "type": data.get("type", "single"),
+        "main_post": {
+            "text": data.get("main_post", ""),
+            "image_url": image_url
+        },
+        "replies": data.get("replies", []),
+        "source_reply": f"출처 : {source_url}"
+    }
+
+def print_dry_run(
+    data: Dict[str, Any],
+    image_url: Optional[str],
+    source_url: str
+) -> None:
+    """
+    Print formatted output for Dry Run testing.
+    """
+    separator = "=" * 50
+    sub_separator = "-" * 30
+
+    print(f"\n{separator}")
+    print(f"📢 [DRY RUN] 게시물 타입: {data.get('type', 'unknown').upper()}")
+    print(separator)
+
+    # Main post
+    print(f"\n[1] 메인 포스트")
+    if image_url:
+        print(f"    🖼️ 이미지: {image_url}")
+    else:
+        print("    🖼️ 이미지: 없음")
+    print(sub_separator)
+    print(data.get("main_post", ""))
+
+    # Replies (for multi-thread)
+    if data.get("type") == "multi":
+        replies = data.get("replies", [])
+        for i, reply in enumerate(replies):
+            print(f"\n[{i + 2}] 대댓글")
+            print(sub_separator)
+            print(reply)
+
+    # Source citation (always last)
+    reply_num = len(data.get("replies", [])) + 2 if data.get("type") == "multi" else 2
+    print(f"\n[{reply_num}] 출처 페이지")
+    print(sub_separator)
+    print(f"출처 : {source_url}")
+
+    print(f"\n{separator}")
+    print("✅ Dry Run 완료. 실제 Threads에는 업로드되지 않았습니다.")
+    print(separator + "\n")
+
 THREADS_API_BASE = "https://graph.threads.net/v1.0"
+
 
 def _create_container(
     user_id: str,
