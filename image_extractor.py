@@ -170,39 +170,46 @@ def get_all_images(url: str) -> list[str]:
         if article_body:
             img_tags = article_body.find_all("img")
             
-            # Keywords to filter out
-            exclude_keywords = [
-                "icon", "logo", "avatar", "profile", "author",
-                "ad-", "ads", "advert", "tracker", "pixel",
-                "button", "social", "share", "spacer", "empty",
-                "gravatar", "emoji"
-            ]
-            
             for img in img_tags:
                 src = img.get("src")
                 if not src:
                     continue
-                    
-                # 1. Keyword Filtering (URL based)
+                
+                # 1. Class-based Filtering (More robust)
+                img_class = img.get("class") or []
+                if isinstance(img_class, str):
+                    img_class = [img_class]
+                
+                # Reject if any class contains negative keywords
+                class_blacklist = ["author", "avatar", "promo", "icon", "logo", "share", "social"]
+                if any(any(bad in cls.lower() for bad in class_blacklist) for cls in img_class):
+                    continue
+
+                # 2. URL Keyword Filtering (Safer list)
                 src_lower = src.lower()
+                exclude_keywords = [
+                    "doubleclick", "facebook.com/tr", "google-analytics",
+                    "spacer", "empty.gif", "gravatar", "tracker",
+                    "avatar-default"
+                ]
                 if any(keyword in src_lower for keyword in exclude_keywords):
                     continue
                     
-                # 2. File Extension Filtering
+                # 3. File Extension Filtering
                 if ".svg" in src_lower or ".gif" in src_lower:
-                    # Exclude SVGs (icons) and GIFs (often ads/trackers) unless specifically wanted
                     continue
                 
-                # 3. Size Hints in HTML (width/height attributes)
+                # 4. Size Hints in HTML (width/height attributes)
                 # Skip very small images if attributes exist
                 width = img.get("width")
                 height = img.get("height")
-                if width and width.isdigit() and int(width) < 200:
+                # Only filter if strictly smaller than 150px
+                if width and width.isdigit() and int(width) < 150:
                     continue
-                if height and height.isdigit() and int(height) < 200:
+                if height and height.isdigit() and int(height) < 150:
                     continue
                 
-                # 4. Duplicate Check
+                # 5. Duplicate Check
                 if src not in images:
                     images.append(src)
         
