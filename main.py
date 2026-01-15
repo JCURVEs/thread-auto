@@ -73,8 +73,18 @@ def save_archive(content: dict, image_urls: list[str], source_url: str, title: s
     os.makedirs(daily_archive_dir, exist_ok=True)
     
     # Sanitize title for filename
-    # Keep alphanumeric, spaces, hyphens, underscores. Remove others.
-    safe_title = re.sub(r'[^a-zA-Z0-9\s\-_]', '', title)
+    # Try to extract the Korean title from the AI content first
+    raw_title = title  # Default to RSS title
+    if content and content.get("main_post"):
+        first_line = content["main_post"].strip().split("\n")[0]
+        # Remove bold markers and brackets
+        clean_line = re.sub(r'[\*\[\]]', '', first_line).strip()
+        if clean_line:
+            raw_title = clean_line
+
+    # Keep Korean, alphanumeric, spaces, hyphens, underscores.
+    # Korean Unicode range: \uAC00-\uD7A3
+    safe_title = re.sub(r'[^a-zA-Z0-9\s\-_가-힣]', '', raw_title)
     # Replace spaces with underscores
     safe_title = re.sub(r'\s+', '_', safe_title).strip()
     
