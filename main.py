@@ -76,11 +76,17 @@ def save_archive(content: dict, image_urls: list[str], source_url: str, title: s
     # Try to extract the Korean title from the AI content first
     raw_title = title  # Default to RSS title
     if content and content.get("main_post"):
-        first_line = content["main_post"].strip().split("\n")[0]
-        # Remove bold markers and brackets
-        clean_line = re.sub(r'[\*\[\]]', '', first_line).strip()
-        if clean_line:
-            raw_title = clean_line
+        main_text = content["main_post"].strip()
+        # Regex to find **[Title]** or [Title] pattern
+        match = re.search(r'\[(.*?)\]', main_text)
+        if match:
+            raw_title = match.group(1).strip()
+        else:
+            # Fallback: take first few words if no bracket title
+            first_line = main_text.split("\n")[0]
+            clean_line = re.sub(r'[\*\[\]]', '', first_line).strip()
+            if clean_line:
+                raw_title = clean_line
 
     # Keep Korean, alphanumeric, spaces, hyphens, underscores.
     # Korean Unicode range: \uAC00-\uD7A3
