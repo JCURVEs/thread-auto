@@ -88,6 +88,10 @@ def save_archive(content: dict, image_urls: list[str], source_url: str, title: s
     # Replace spaces with underscores
     safe_title = re.sub(r'\s+', '_', safe_title).strip()
     
+    # Limit length to avoid filesystem issues
+    if len(safe_title) > 50:
+        safe_title = safe_title[:50]
+    
     if not safe_title:
         safe_title = "Untitled_Article"
         

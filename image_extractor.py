@@ -169,22 +169,44 @@ def get_all_images(url: str) -> list[str]:
         
         if article_body:
             img_tags = article_body.find_all("img")
+            
+            # Keywords to filter out
+            exclude_keywords = [
+                "icon", "logo", "avatar", "profile", "author",
+                "ad-", "ads", "advert", "tracker", "pixel",
+                "button", "social", "share", "spacer", "empty",
+                "gravatar", "emoji"
+            ]
+            
             for img in img_tags:
                 src = img.get("src")
                 if not src:
                     continue
                     
-                # Filter out small icons, ads, spacers
-                # This is a heuristic; might need tuning based on specific sites
-                if "icon" in src or "logo" in src or "avatar" in src:
-                    continue
-                if ".svg" in src: # Skip SVGs usually used for icons
+                # 1. Keyword Filtering (URL based)
+                src_lower = src.lower()
+                if any(keyword in src_lower for keyword in exclude_keywords):
                     continue
                     
+                # 2. File Extension Filtering
+                if ".svg" in src_lower or ".gif" in src_lower:
+                    # Exclude SVGs (icons) and GIFs (often ads/trackers) unless specifically wanted
+                    continue
+                
+                # 3. Size Hints in HTML (width/height attributes)
+                # Skip very small images if attributes exist
+                width = img.get("width")
+                height = img.get("height")
+                if width and width.isdigit() and int(width) < 200:
+                    continue
+                if height and height.isdigit() and int(height) < 200:
+                    continue
+                
+                # 4. Duplicate Check
                 if src not in images:
                     images.append(src)
         
-        # Limit to 5 images to avoid spamming
+        # Limit to 5 images
         return images[:5]
         
     except Exception as e:
