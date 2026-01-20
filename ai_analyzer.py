@@ -9,7 +9,7 @@ Easily switch between providers via environment variable AI_PROVIDER.
 
 import json
 import os
-from typing import Dict, Any, Optional, Callable
+from typing import Dict, Any, Optional
 from abc import ABC, abstractmethod
 
 
@@ -270,19 +270,13 @@ def analyze_article(client: Dict, text: str) -> Optional[Dict]:
             return _generate_requests_custom(client, system_prompt, text)
             
     except Exception as e:
-        print(f"❌ 분석 단계 실패: {e}")
-        # Debug: Print raw response if available
-        if 'response' in locals() and hasattr(response, 'text'):
-            print(f"🔍 Raw Gemini Output: {response.text[:200]}...")
-        if 'response' in locals() and hasattr(response, 'choices'):
-             print(f"🔍 Raw OpenAI/Groq Output: {response.choices[0].message.content[:200]}...")
+        print(f"❌ 분석 단계 실패: {e}") # Reduce logging noise in wrapper
         return None
 
 def write_thread_from_analysis(client: Dict, analysis: Dict, original_title: str) -> Optional[Dict]:
     """
     Step 2: Write specific Thread content using the 'Next Builder' persona.
     """
-    # Use the existing SYSTEM_PROMPT which contains the Next Builder Formula
     user_prompt = f"""
     [뉴스 제목]: {original_title}
     
@@ -311,11 +305,51 @@ def write_thread_from_analysis(client: Dict, analysis: Dict, original_title: str
                 response_format={"type": "json_object"}
             )
             return json.loads(response.choices[0].message.content)
-         # ... (implement other providers similarly) ...
-         return _generate_openai(client, user_prompt) # reuse existing wrapper for simplicity
+         elif client["type"] == "gemini":
+            response = client["client"].generate_content(
+                SYSTEM_PROMPT + "\n\n" + user_prompt
+            )
+            raw_text = response.text.replace("```json", "").replace("```", "").strip()
+            return json.loads(raw_text)
+         
+         return _generate_requests(client, user_prompt)
          
     except Exception as e:
         print(f"❌ 작문 단계 실패: {e}")
+        return None
+
+def generate_thread_content(client: Dict, title: str, description: str) -> Optional[Dict]:
+    """
+    Wrapper function to provide compatibility with main.py.
+    Performs the 2-step analysis (Extract -> Write) transparently.
+    """
+    # 1. Analyze Factors
+    print("   ... 1단계: 팩트 추출 중 ...")
+    analysis = analyze_article(client, description)
+    if not analysis:
+        # Fallback to direct generation if analysis fails
+        print("   ⚠️ 1단계 실패, 직접 생성을 시도합니다.")
+        return _direct_generate(client, title, description)
+        
+    # 2. Write Thread
+    print("   ... 2단계: 스레드 작성 중 ...")
+    return write_thread_from_analysis(client, analysis, title)
+
+def _direct_generate(client: Dict, title: str, description: str) -> Optional[Dict]:
+    """Direct generation fallback (legacy mode)."""
+    user_prompt = f"뉴스 제목: {title}\n\n뉴스 내용:\n{description}"
+    try:
+        if client["type"] == "openai":
+            return _generate_openai(client, user_prompt)
+        elif client["type"] == "gemini":
+            response = client["client"].generate_content(
+                 SYSTEM_PROMPT + "\n\n" + user_prompt
+            )
+            raw = response.text.replace("```json", "").replace("```", "").strip()
+            return json.loads(raw)
+        elif client["type"] == "requests":
+            return _generate_requests(client, user_prompt)
+    except Exception:
         return None
 
 def _generate_requests_custom(client: Dict, sys_prompt: str, user_prompt: str) -> Optional[Dict]:
@@ -330,6 +364,20 @@ def _generate_requests_custom(client: Dict, sys_prompt: str, user_prompt: str) -
     res = requests.post(f"{client['base_url']}/chat/completions", headers=headers, json=data)
     return json.loads(res.json()["choices"][0]["message"]["content"])
 
+
+def _generate_openai(client: Dict, user_prompt: str) -> Optional[Dict]:
+    """Generate using OpenAI-compatible API."""
+    response = client["client"].chat.completions.create(
+        model=client["model"],
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt}
+        ],
+        response_format={"type": "json_object"},
+        temperature=0.7,
+        max_tokens=1000
+    )
+    return json.loads(response.choices[0].message.content)
 
 
 def _generate_requests(client: Dict, user_prompt: str) -> Optional[Dict]:
