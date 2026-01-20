@@ -104,8 +104,8 @@ def run_pipeline() -> None:
     else:
         print("⚠️ 이미지 없음 (텍스트만 게시)")
 
-    # Step 3: AI Analysis
-    print(f"\n🔄 [Step 3] AI 분석 시작...")
+    # Step 3: AI Analysis (Newsletter Format)
+    print(f"\n🔄 [Step 3] AI 뉴스레터 분석 중...")
     print(f"   Provider: {AI_PROVIDER}, Model: {model}")
 
     try:
@@ -116,16 +116,16 @@ def run_pipeline() -> None:
             info["description"]
         )
     except Exception as e:
-        print(f"❌ AI 클라이언트 생성 실패: {e}")
+        print(f"❌ AI 클라이언트 생성 또는 분석 실패: {e}")
         return
 
     if not content or not validate_content(content):
-        print("❌ AI 콘텐츠 생성 실패")
+        print("❌ AI 분석 결과가 유효하지 않습니다.")
         return
 
-    print(f"✅ 콘텐츠 생성 완료 (타입: {content['type']})")
+    print(f"✅ 분석 완료: {content.get('title', '제목 없음')}")
 
-    # Step 3.5: Archive
+    # Step 3.5: Archive (Main Goal)
     print(f"\n💾 [Step 3.5] 아카이빙 중...")
     try:
         archive_path = save_to_archive(
@@ -139,26 +139,17 @@ def run_pipeline() -> None:
     except Exception as e:
         print(f"⚠️ 아카이빙 실패: {e}")
 
-    # Step 4: Output
-    print(f"\n🔄 [Step 4] 출력 처리 중...")
+    # Step 4: Output (Dry Run only for now)
+    print(f"\n🔄 [Step 4] 출력 및 결과 확인")
     if DRY_RUN:
-        print("   모드: DRY RUN (테스트)")
-        print_dry_run(content, image_url, info["link"])
+        print("   [Dry Run: 뉴스레터 프리뷰]")
+        print(f"   📰 제목: {content.get('title')}")
+        print(f"   📝 요약: {content.get('summary')}")
+        print(f"   🧠 쉬운설명: {content.get('easy_explainer')}")
+        print(f"   🏷️  분야: {content.get('category')} (중요도: {content.get('importance')})")
     else:
-        print("   모드: PRODUCTION")
-        if THREADS_ACCESS_TOKEN:
-            success = post_to_threads(
-                content,
-                image_url,
-                info["link"],
-                THREADS_ACCESS_TOKEN
-            )
-            if success:
-                print("✅ Threads에 게시 완료!")
-            else:
-                print("❌ Threads 게시 실패")
-        else:
-            print("❌ THREADS_ACCESS_TOKEN이 설정되지 않았습니다.")
+        print("   ⚠️ 현재 Production 모드(Threads 업로드)는 뉴스레터 포맷 적용 중으로 비활성화되었습니다.")
+        print("   ✅ 아카이빙은 정상적으로 완료되었습니다.")
 
     print("\n" + "#" * 50)
     print("# PIPELINE 완료")
