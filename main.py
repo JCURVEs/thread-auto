@@ -12,6 +12,8 @@ Supports multiple FREE AI providers:
 
 import os
 from typing import Optional
+from datetime import datetime, timedelta
+import feedparser
 
 from rss_collector import (
     fetch_feed,
@@ -29,7 +31,7 @@ from ai_analyzer import (
     DEFAULT_PROVIDER
 )
 from thread_formatter import print_dry_run, post_to_threads
-from archiver import save_to_archive
+from archiver import save_to_archive, is_duplicate
 
 
 # --- Configuration ---
@@ -72,6 +74,23 @@ def process_single_source(source_name: str, rss_url: str, client: dict, model: s
         return False
 
     info = get_entry_info(entry)
+
+    # Check 1: Published date (within 24 hours)
+    published_date = entry.get("published_parsed") or entry.get("updated_parsed")
+    if published_date:
+        from time import struct_time, mktime
+        published_dt = datetime.fromtimestamp(mktime(published_date))
+        age = datetime.now() - published_dt
+
+        if age > timedelta(hours=24):
+            print(f"⏰ 오래된 글 ({age.days}일 {age.seconds//3600}시간 전) - 스킵")
+            return False
+
+    # Check 2: Duplicate URL
+    if is_duplicate(info["link"]):
+        print(f"🔁 이미 수집된 글 - 스킵")
+        return False
+
     print(f"✅ 최신 글: {info['title'][:60]}...")
 
     # Step 2: Extract image
