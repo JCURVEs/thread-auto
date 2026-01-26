@@ -36,7 +36,7 @@ from archiver import save_to_archive
 AI_PROVIDER = os.environ.get("AI_PROVIDER", DEFAULT_PROVIDER)
 AI_MODEL = os.environ.get("AI_MODEL", None)  # None = 제공자 기본 모델 사용
 THREADS_ACCESS_TOKEN = os.environ.get("THREADS_ACCESS_TOKEN")
-RSS_URL = os.environ.get("RSS_URL", DEFAULT_RSS_SOURCES["techcrunch"])
+RSS_URL = os.environ.get("RSS_URL", DEFAULT_RSS_SOURCES["huggingface"])  # Default: Hugging Face
 DRY_RUN = os.environ.get("DRY_RUN", "True").lower() in ("true", "1", "yes")
 
 

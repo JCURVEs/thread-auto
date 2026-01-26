@@ -1,21 +1,28 @@
 """
 RSS Collector module for Thread-Auto.
 
-This module handles RSS feed fetching and parsing from various tech news sources.
-Supports multiple sources including TechCrunch, The Verge, Hacker News, etc.
+This module handles RSS feed fetching and parsing from AI company blogs and research sources.
+Focused on breakthrough AI tech, new models, and research papers.
 """
 
 from typing import List, Dict, Any, Optional
 import feedparser
 
 
-# Default RSS feed sources
+# AI-focused RSS feed sources (official company blogs & research)
 DEFAULT_RSS_SOURCES = {
-    "techcrunch": "https://techcrunch.com/feed/",
-    "theverge": "https://www.theverge.com/rss/index.xml",
-    "hackernews": "https://news.ycombinator.com/rss",
-    "openai": "https://openai.com/blog/rss/",
-    "google": "https://blog.google/rss/",
+    # AI Company Blogs
+    "openai": "https://openai.com/news/rss.xml",           # OpenAI official news
+    "deepmind": "https://deepmind.google/blog/rss.xml",     # Google DeepMind
+    "google_research": "https://research.google/blog/rss",  # Google Research
+    "huggingface": "https://huggingface.co/blog/feed.xml",  # Hugging Face blog
+    "meta_research": "https://research.facebook.com/feed",  # Meta AI Research
+
+    # Research & Papers
+    "arxiv_ai": "https://rss.arxiv.org/rss/cs.AI",          # arXiv cs.AI
+    "arxiv_lg": "https://rss.arxiv.org/rss/cs.LG",          # arXiv cs.LG (Machine Learning)
+    "arxiv_cv": "https://rss.arxiv.org/rss/cs.CV",          # arXiv cs.CV (Computer Vision)
+    "arxiv_cl": "https://rss.arxiv.org/rss/cs.CL",          # arXiv cs.CL (Computation and Language/NLP)
 }
 
 
