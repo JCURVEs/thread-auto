@@ -128,7 +128,8 @@ def process_single_source(source_name: str, rss_url: str, client: dict, model: s
             info["link"],
             info["title"],
             AI_PROVIDER,
-            model
+            model,
+            source_name  # Pass company name
         )
         print(f"💾 아카이브 저장 완료")
         return True

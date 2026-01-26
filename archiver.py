@@ -75,46 +75,70 @@ def save_to_archive(
     source_url: str,
     original_title: str, # Not used in output but kept for interface compatibility
     provider: str,
-    model: str
+    model: str,
+    source_name: str = "Unknown"
 ) -> str:
     """
-    Save content in the User-Defined Newsletter Format.
-    
-    Format:
-    ---
-    제목: ...
-    요약: ...
-    쉬운설명: ...
-    관련분야: ...
-    중요도: ...
-    전체링크 : ...
+    Save content in readable newsletter format with company name.
 
-    Image
+    Format:
+    ## [Company] Title
+    **분야:** Category | **중요도:** X점
+    **요약:** Summary
+    **쉬운설명:** Easy explanation
+    **출처:** URL
+    ![Image](url)
     ---
     """
     filepath = get_archive_path()
-    
+
     # Prepare content block
     lines = []
-    
+
     # Header for new file
     if not os.path.exists(filepath):
-        lines.append(f"# Daily Tech News Archive ({datetime.now().strftime('%Y-%m-%d')})\n\n")
-    
-    # Separator
-    lines.append("---\n\n")
-    
-    # Content Fields
-    lines.append(f"제목: {data.get('title', '제목 없음')}\n")
-    lines.append(f"요약: {data.get('summary', '요약 없음')}\n")
-    lines.append(f"쉬운설명: {data.get('easy_explainer', '설명 없음')}\n")
-    lines.append(f"관련분야: {data.get('category', '기타')}\n")
-    lines.append(f"중요도: {data.get('importance', 5)}점\n")
-    lines.append(f"전체링크 : {source_url}\n\n")
-    
+        lines.append(f"# Daily AI Tech News ({datetime.now().strftime('%Y-%m-%d')})\n\n")
+        lines.append("*Collected from OpenAI, DeepMind, Google Research, Hugging Face, Meta AI, arXiv*\n\n")
+        lines.append("---\n\n")
+
+    # Company name mapping for readability
+    company_names = {
+        "openai": "OpenAI",
+        "deepmind": "DeepMind",
+        "google_research": "Google Research",
+        "huggingface": "Hugging Face",
+        "meta_research": "Meta AI",
+        "arxiv_ai": "arXiv AI",
+        "arxiv_lg": "arXiv ML",
+        "arxiv_cv": "arXiv Vision",
+        "arxiv_cl": "arXiv NLP"
+    }
+
+    company = company_names.get(source_name.lower(), source_name.upper())
+
+    # Title with company name
+    title = data.get('title', '제목 없음')
+    lines.append(f"## [{company}] {title}\n\n")
+
+    # Metadata line
+    category = data.get('category', '기타')
+    importance = data.get('importance', 5)
+    lines.append(f"**분야:** {category} | **중요도:** {importance}점\n\n")
+
+    # Summary
+    summary = data.get('summary', '요약 없음')
+    lines.append(f"**요약:**  \n{summary}\n\n")
+
+    # Easy explanation
+    explainer = data.get('easy_explainer', '설명 없음')
+    lines.append(f"**쉬운설명:**  \n{explainer}\n\n")
+
+    # Source URL
+    lines.append(f"**출처:** {source_url}\n\n")
+
     # Image
     if image_url:
-        lines.append(f"![Image]({image_url})\n\n")
+        lines.append(f"![Article Image]({image_url})\n\n")
         
     # Append to file
     with open(filepath, "a", encoding="utf-8") as f:
