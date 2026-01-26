@@ -147,3 +147,33 @@ def validate_content(content: Dict[str, Any]) -> bool:
     """Validate newsletter format."""
     required_keys = ["title", "summary", "easy_explainer", "category", "importance"]
     return all(key in content for key in required_keys)
+
+
+def get_provider_info() -> str:
+    """
+    Display available AI providers information.
+
+    Returns:
+        Formatted string with provider details.
+    """
+    lines = [
+        "\n" + "=" * 60,
+        "Available AI Providers",
+        "=" * 60,
+        ""
+    ]
+
+    for name, config in PROVIDERS.items():
+        lines.append(f"[{name.upper()}]")
+        lines.append(f"  Model: {config['default_model']}")
+        lines.append(f"  Free Limit: {config['free_limit']}")
+        lines.append(f"  Environment Variable: {config['env_key']}")
+        lines.append(f"  Base URL: {config['base_url'] or 'Native SDK'}")
+        lines.append("")
+
+    lines.append("=" * 60)
+    lines.append("Set AI_PROVIDER environment variable to choose provider.")
+    lines.append("Example: export AI_PROVIDER=groq")
+    lines.append("=" * 60 + "\n")
+
+    return "\n".join(lines)
