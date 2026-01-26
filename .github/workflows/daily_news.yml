@@ -18,7 +18,9 @@ on:
 jobs:
   thread-auto-pipeline:
     runs-on: ubuntu-latest
-    
+    permissions:
+      contents: write  # Git 푸시 권한
+
     steps:
     - name: 📥 리포지토리 체크아웃
       uses: actions/checkout@v4
@@ -48,8 +50,8 @@ jobs:
         # Threads 설정
         THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
         
-        # RSS 및 실행 모드
-        RSS_URL: ${{ vars.RSS_URL || 'https://techcrunch.com/feed/' }}
+        # RSS 및 실행 모드 (기본: Hugging Face - AI 전문 블로그)
+        RSS_URL: ${{ vars.RSS_URL || 'https://huggingface.co/blog/feed.xml' }}
         DRY_RUN: ${{ github.event.inputs.dry_run || vars.DRY_RUN || 'true' }}
       run: python main.py
 
