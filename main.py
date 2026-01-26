@@ -36,7 +36,8 @@ from archiver import save_to_archive
 AI_PROVIDER = os.environ.get("AI_PROVIDER", DEFAULT_PROVIDER)
 AI_MODEL = os.environ.get("AI_MODEL", None)  # None = 제공자 기본 모델 사용
 THREADS_ACCESS_TOKEN = os.environ.get("THREADS_ACCESS_TOKEN")
-RSS_URL = os.environ.get("RSS_URL", DEFAULT_RSS_SOURCES["huggingface"])  # Default: Hugging Face
+RSS_URL = os.environ.get("RSS_URL", None)  # If None, use all sources
+COLLECT_ALL_SOURCES = os.environ.get("COLLECT_ALL_SOURCES", "True").lower() in ("true", "1", "yes")
 DRY_RUN = os.environ.get("DRY_RUN", "True").lower() in ("true", "1", "yes")
 
 
@@ -48,21 +49,85 @@ def get_api_key() -> Optional[str]:
     return os.environ.get(config["env_key"])
 
 
+def process_single_source(source_name: str, rss_url: str, client: dict, model: str) -> bool:
+    """
+    Process a single RSS source.
+
+    Returns True if successful, False otherwise.
+    """
+    print(f"\n{'='*60}")
+    print(f"📡 [{source_name.upper()}] {rss_url}")
+    print(f"{'='*60}")
+
+    # Step 1: Fetch RSS feed
+    print(f"🔄 RSS 피드 확인 중...")
+    feed = fetch_feed(rss_url)
+    if not feed:
+        print(f"❌ RSS 피드를 가져올 수 없습니다.")
+        return False
+
+    entry = get_latest_entry(feed)
+    if not entry:
+        print(f"⚠️ 새 글이 없습니다.")
+        return False
+
+    info = get_entry_info(entry)
+    print(f"✅ 최신 글: {info['title'][:60]}...")
+
+    # Step 2: Extract image
+    image_url = get_article_image(info["link"])
+    if image_url:
+        print(f"✅ 이미지: {image_url[:50]}...")
+    else:
+        print("⚠️ 이미지 없음")
+
+    # Step 3: AI Analysis
+    print(f"🤖 AI 분석 중...")
+    try:
+        content = generate_thread_content(
+            client,
+            info["title"],
+            info["description"]
+        )
+    except Exception as e:
+        print(f"❌ AI 분석 실패: {e}")
+        return False
+
+    if not content or not validate_content(content):
+        print("❌ AI 분석 결과가 유효하지 않습니다.")
+        return False
+
+    print(f"✅ 분석 완료")
+    print(f"   📰 {content.get('title', '제목 없음')[:50]}...")
+    print(f"   🏷️  {content.get('category')} (중요도: {content.get('importance')}점)")
+
+    # Step 4: Archive
+    try:
+        save_to_archive(
+            content,
+            image_url,
+            info["link"],
+            info["title"],
+            AI_PROVIDER,
+            model
+        )
+        print(f"💾 아카이브 저장 완료")
+        return True
+    except Exception as e:
+        print(f"⚠️ 아카이빙 실패: {e}")
+        return False
+
+
 def run_pipeline() -> None:
     """
     Execute the Thread-Auto pipeline.
 
-    Pipeline steps:
-    1. Fetch latest news from RSS feed
-    2. Extract og:image from article
-    3. Analyze content with AI (Groq/OpenRouter/Gemini)
-    4. Format and output (Dry Run or Production)
-    5. Save Archive
+    Collects news from multiple AI company blogs and research sources.
     """
-    print("\n" + "#" * 50)
-    print("# THREAD-AUTO PIPELINE")
+    print("\n" + "#" * 70)
+    print("# THREAD-AUTO PIPELINE - Multi-Source AI News Collector")
     print(f"# AI Provider: {AI_PROVIDER.upper()}")
-    print("#" * 50)
+    print("#" * 70)
 
     # Validate API key
     api_key = get_api_key()
@@ -77,83 +142,44 @@ def run_pipeline() -> None:
     model = AI_MODEL or provider_config["default_model"]
     print(f"# Model: {model}")
     print(f"# Free Limit: {provider_config['free_limit']}")
-    print("#" * 50)
 
-    # Step 1: Fetch RSS feed
-    print(f"\n🔄 [Step 1] RSS 피드 확인 중...")
-    print(f"   URL: {RSS_URL}")
-
-    feed = fetch_feed(RSS_URL)
-    if not feed:
-        print("❌ RSS 피드를 가져올 수 없습니다.")
-        return
-
-    entry = get_latest_entry(feed)
-    if not entry:
-        print("❌ 새 글이 없습니다.")
-        return
-
-    info = get_entry_info(entry)
-    print(f"✅ 최신 글 발견: {info['title']}")
-
-    # Step 2: Extract image
-    print(f"\n🔄 [Step 2] 이미지 추출 중...")
-    image_url = get_article_image(info["link"])
-    if image_url:
-        print(f"✅ 이미지 URL: {image_url[:60]}...")
-    else:
-        print("⚠️ 이미지 없음 (텍스트만 게시)")
-
-    # Step 3: AI Analysis (Newsletter Format)
-    print(f"\n🔄 [Step 3] AI 뉴스레터 분석 중...")
-    print(f"   Provider: {AI_PROVIDER}, Model: {model}")
-
+    # Create AI client once
     try:
         client = create_client(api_key, AI_PROVIDER, model)
-        content = generate_thread_content(
-            client,
-            info["title"],
-            info["description"]
-        )
     except Exception as e:
-        print(f"❌ AI 클라이언트 생성 또는 분석 실패: {e}")
+        print(f"❌ AI 클라이언트 생성 실패: {e}")
         return
 
-    if not content or not validate_content(content):
-        print("❌ AI 분석 결과가 유효하지 않습니다.")
-        return
-
-    print(f"✅ 분석 완료: {content.get('title', '제목 없음')}")
-
-    # Step 3.5: Archive (Main Goal)
-    print(f"\n💾 [Step 3.5] 아카이빙 중...")
-    try:
-        archive_path = save_to_archive(
-            content,
-            image_url,
-            info["link"],
-            info["title"],
-            AI_PROVIDER,
-            model
-        )
-    except Exception as e:
-        print(f"⚠️ 아카이빙 실패: {e}")
-
-    # Step 4: Output (Dry Run only for now)
-    print(f"\n🔄 [Step 4] 출력 및 결과 확인")
-    if DRY_RUN:
-        print("   [Dry Run: 뉴스레터 프리뷰]")
-        print(f"   📰 제목: {content.get('title')}")
-        print(f"   📝 요약: {content.get('summary')}")
-        print(f"   🧠 쉬운설명: {content.get('easy_explainer')}")
-        print(f"   🏷️  분야: {content.get('category')} (중요도: {content.get('importance')})")
+    # Determine which sources to collect
+    if RSS_URL:
+        # Single source mode (manual override)
+        print(f"# Mode: Single Source (manual)")
+        print(f"# URL: {RSS_URL}")
+        print("#" * 70)
+        sources = [("manual", RSS_URL)]
     else:
-        print("   ⚠️ 현재 Production 모드(Threads 업로드)는 뉴스레터 포맷 적용 중으로 비활성화되었습니다.")
-        print("   ✅ 아카이빙은 정상적으로 완료되었습니다.")
+        # Multi-source mode (all AI blogs)
+        print(f"# Mode: Multi-Source (all AI company blogs)")
+        print(f"# Sources: {len(DEFAULT_RSS_SOURCES)}")
+        print("#" * 70)
+        sources = list(DEFAULT_RSS_SOURCES.items())
 
-    print("\n" + "#" * 50)
-    print("# PIPELINE 완료")
-    print("#" * 50 + "\n")
+    # Process each source
+    success_count = 0
+    total_count = len(sources)
+
+    for source_name, rss_url in sources:
+        try:
+            if process_single_source(source_name, rss_url, client, model):
+                success_count += 1
+        except Exception as e:
+            print(f"❌ 예상치 못한 오류: {e}")
+
+    # Summary
+    print("\n" + "#" * 70)
+    print(f"# PIPELINE 완료")
+    print(f"# 성공: {success_count}/{total_count} 소스")
+    print("#" * 70 + "\n")
 
 
 def show_providers() -> None:

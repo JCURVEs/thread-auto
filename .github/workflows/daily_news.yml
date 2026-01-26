@@ -49,9 +49,10 @@ jobs:
         
         # Threads 설정
         THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
-        
-        # RSS 및 실행 모드 (기본: Hugging Face - AI 전문 블로그)
-        RSS_URL: ${{ vars.RSS_URL || 'https://huggingface.co/blog/feed.xml' }}
+
+        # RSS 및 실행 모드 (빈 값 = 모든 AI 회사 블로그에서 수집)
+        RSS_URL: ${{ vars.RSS_URL || '' }}
+        COLLECT_ALL_SOURCES: 'true'
         DRY_RUN: ${{ github.event.inputs.dry_run || vars.DRY_RUN || 'true' }}
       run: python main.py
 
