@@ -1,68 +1,89 @@
-# Thread-Auto
+# Thread-Auto v2.0
 
-> AI News Aggregator: Multi-Source Collection from Major AI Company Blogs
+> AI 뉴스 수집부터 스레드 생성까지 - 완전 자동화 파이프라인
 
-Thread-Auto는 **OpenAI, DeepMind, Google Research, Hugging Face, Meta AI, arXiv** 등 주요 AI 회사의 공식 블로그에서 최신 AI 기술 뉴스를 자동 수집하고, **AI 개발자/연구자 관점**으로 분석하여 매일 아카이빙하는 자동화 파이프라인입니다.
+Thread-Auto는 주요 AI 회사 블로그에서 최신 기술 뉴스를 수집하고, Claude Code Agents를 활용해 @jokerburg.builder 계정용 스레드 시리즈를 자동 생성하는 시스템입니다.
 
-## ✨ 핵심 기능
+## 소개
 
-| 기능 | 설명 |
-|------|------|
-| 🌐 **멀티 소스** | 9개 AI 회사 공식 블로그 동시 수집 |
-| 🎯 **AI 개발자 관점** | 기술 혁신 중심 큐레이션 (비즈니스 뉴스 제외) |
-| ⏰ **24시간 신선도** | 최신 뉴스만 수집 (24시간 이내) |
-| 🔁 **중복 방지** | 7일 아카이브 기반 중복 URL 필터링 |
-| 📊 **엄격한 평가** | 9-10점: 혁신, 7-8점: 실무 기술, 3-4점: 비즈니스 |
-| 📱 **가독성** | 회사명 태그, 분야 분류, 중요도 표시 |
-| 🤖 **완전 자동화** | 매일 오전 9시 자동 실행 (GitHub Actions) |
+### 주요 기능
 
-## 🔄 파이프라인 동작 방식
+- **🔄 자동 뉴스 수집**: OpenAI, DeepMind, Google Research, Hugging Face, Meta AI, arXiv 등 9개 소스
+- **🤖 AI 분석**: Groq Llama 3.3 70B로 중요도 평가 및 분야 분류
+- **🧵 스레드 자동 생성**: Claude Code Agents로 3가지 콘텐츠 타입 지원
+  - 📰 데일리뉴스 (5-7개 스레드)
+  - 📄 arXiv 논문 (7-10개 스레드)
+  - 🏢 기업분석 (10-15개 스레드)
+- **✅ 품질 검수**: 자동 스타일 검수 및 팩트 체크
+
+## 아키텍처
+
+### 전체 흐름
 
 ```
-1. RSS 수집 (9개 소스)
-   ↓
-2. 24시간 신선도 필터링
-   ↓
-3. 중복 URL 체크 (7일 아카이브)
-   ↓
-4. AI 분석 (Groq Llama 3.3 70B)
-   - 제목 생성
-   - 분야 분류 (7가지 카테고리)
-   - 중요도 평가 (1-10점)
-   - 요약 + 쉬운설명
-   ↓
-5. 이미지 추출 (og:image)
-   ↓
-6. 마크다운 아카이빙 (archive/YYYY-MM-DD.md)
-   ↓
-7. Git 커밋 & 푸시
+┌─────────────────────────────────────────────────────────────┐
+│  v1.0: RSS 수집 & 아카이빙                                  │
+└─────────────────────────────────────────────────────────────┘
+              ↓
+    RSS 수집 (9개 소스)
+              ↓
+    AI 분석 (중요도 평가)
+              ↓
+    archive/YYYY-MM-DD.md
+              ↓
+┌─────────────────────────────────────────────────────────────┐
+│  v2.0: Claude Code Agents                                    │
+└─────────────────────────────────────────────────────────────┘
+              ↓
+    orchestrator.md (입력 분류)
+              ↓
+    ┌─────────┬─────────┬──────────┐
+    │  뉴스   │  논문   │  기업    │
+    │  팀     │  팀     │  팀      │
+    └─────────┴─────────┴──────────┘
+              ↓
+    reviewer.md (품질 검수)
+              ↓
+    threads/{type}/YYYYMMDD-{slug}/
 ```
 
-**매일 오전 9시 자동 실행** → **변경사항이 있으면 자동 커밋**
+### 에이전트 구조
 
-## 📁 프로젝트 구조
+| 에이전트 | 역할 |
+|---------|------|
+| `orchestrator.md` | 입력 분류 및 라우팅 (뉴스/논문/기업) |
+| `news-curator.md` | archive에서 스레드 후보 선별 |
+| `news-thread-writer.md` | 뉴스 스레드 작성 |
+| `paper-analyzer.md` | arXiv 논문 분석 |
+| `paper-thread-writer.md` | 논문 스레드 작성 |
+| `company-researcher.md` | 기업 리서치 |
+| `company-thread-writer.md` | 기업 스레드 작성 |
+| `reviewer.md` | 품질 검수 및 승인 |
+
+### 디렉토리 구조
 
 ```
 thread-auto/
-├── .github/
-│   └── workflows/
-│       └── daily_news.yml       # GitHub Actions 스케줄 (매일 9시)
-├── archive/                     # 일별 뉴스 아카이브 (YYYY-MM-DD.md)
-├── rss_collector.py             # 9개 AI 블로그 RSS 수집
-├── image_extractor.py           # og:image 추출 모듈
-├── ai_analyzer.py               # Groq AI 분석 (Llama 3.3 70B)
-├── archiver.py                  # 마크다운 아카이빙 + 중복 체크
-├── thread_formatter.py          # 포맷팅 및 출력 모듈
-├── main.py                      # 메인 파이프라인
-├── requirements.txt             # 의존성 목록
-└── README.md                    # 프로젝트 문서
+├── .github/workflows/
+│   ├── daily_news.yml           # 매일 9시 RSS 수집
+│   └── thread_generation.yml    # 스레드 생성 워크플로우
+├── .claude/agents/              # 8개 에이전트 정의
+├── references/                  # 스타일 가이드
+├── archive/                     # 일별 뉴스 아카이브
+├── threads/                     # 생성된 스레드
+│   ├── news/
+│   ├── papers/
+│   └── companies/
+├── main.py                      # v1.0 RSS 수집 파이프라인
+└── thread_generator.py          # v2.0 스레드 생성 스크립트
 ```
 
-## 🚀 빠른 시작
+## 빠른 시작
 
-### 1. 의존성 설치
+### 1. 설치
 
 ```bash
+git clone https://github.com/jojaehui/thread-auto.git
 cd thread-auto
 pip install -r requirements.txt
 ```
@@ -71,146 +92,125 @@ pip install -r requirements.txt
 
 ```bash
 export GROQ_API_KEY="gsk_..."        # Groq API 키 (무료)
-export DRY_RUN="true"                # 테스트 모드 (실제 업로드 안함)
-export COLLECT_ALL_SOURCES="true"    # 모든 AI 블로그 수집
+export COLLECT_ALL_SOURCES="true"    # 모든 소스 수집
 ```
 
-**무료 AI Provider 지원:**
-- **Groq** (기본): Llama 3.3 70B, 14K req/day, 가장 빠름
-- **OpenRouter**: Qwen 2.5 72B, 400+ models
-- **Gemini**: Google, 1.5K req/day
-
-### 3. 실행
+### 3. RSS 수집 실행
 
 ```bash
+# 뉴스 수집 및 아카이빙
 python main.py
 ```
 
-## ⚙️ 환경 변수
+결과: `archive/YYYY-MM-DD.md` 파일 생성
 
-| 변수 | 필수 | 설명 | 기본값 |
-|------|------|------|--------|
-| `GROQ_API_KEY` | ✅ | Groq API 키 (무료) | - |
-| `AI_PROVIDER` | ❌ | AI 제공자 (groq/openrouter/gemini) | `groq` |
-| `AI_MODEL` | ❌ | AI 모델 (빈 값 = 기본 모델) | - |
-| `COLLECT_ALL_SOURCES` | ❌ | 모든 AI 블로그 수집 | `true` |
-| `RSS_URL` | ❌ | 단일 RSS URL (멀티소스 비활성화) | - |
-| `DRY_RUN` | ❌ | 테스트 모드 | `true` |
-| `THREADS_ACCESS_TOKEN` | ❌ | Threads API 토큰 | - |
+### 4. 스레드 생성
 
-## 🤖 GitHub Actions 설정
-
-### Secrets 등록
-
-1. GitHub Repo → **Settings** → **Secrets and variables** → **Actions**
-2. **New repository secret** 클릭
-3. 다음 시크릿 추가:
-   - `GROQ_API_KEY`: Groq API 키 (https://console.groq.com/keys)
-
-### 수동 실행 테스트
-
-1. GitHub Repo → **Actions** 탭
-2. **Thread-Auto Daily Run** 클릭
-3. **Run workflow** 버튼 클릭
-
-### 자동 실행
-
-- 매일 한국 시간 오전 9시 (UTC 00:00)에 자동 실행됩니다.
-
-## 📝 아카이브 포맷
-
-매일 `archive/YYYY-MM-DD.md` 파일에 다음 형식으로 저장됩니다:
-
-```markdown
-# Daily AI Tech News (2026-01-26)
-
-*Collected from OpenAI, DeepMind, Google Research, Hugging Face, Meta AI, arXiv*
-
----
-
-## [OpenAI] Codex 에이전트 루프 기술 분석
-
-**분야:** 에이전트/자동화 | **중요도:** 7점
-
-**요약:**
-Codex CLI는 Responses API를 통해 모델, 도구, 프롬프트, 성능을 오케스트레이션하는 방법에 대해 설명합니다...
-
-**쉬운설명:**
-즉, 인공지능이 작업을 자동화하도록 도와주는 Codex 시스템이 어떻게 돌아가는지 자세히 설명하는 글이랍니다.
-
-**출처:** https://openai.com/index/unrolling-the-codex-agent-loop
-
-![Article Image](https://images.ctfassets.net/kftzwdyauwt9/...)
-
----
-```
-
-### AI 분석 분야 (7가지)
-
-- **LLM 출시**: GPT-5, Claude 4 등 새 모델 출시
-- **비전/멀티모달**: 이미지/비디오 AI 기술
-- **오픈소스 도구**: Hugging Face, LangChain 등
-- **연구 논문**: arXiv, 학회 논문
-- **API/인프라**: 클라우드 AI 서비스
-- **에이전트/자동화**: AI 에이전트, 워크플로우
-- **비즈니스**: 펀딩, M&A (낮은 중요도)
-
-## 📰 수집 소스 (9개 AI 블로그)
-
-### AI 회사 공식 블로그
-- **OpenAI** - https://openai.com/news/rss.xml
-- **DeepMind** - https://deepmind.google/blog/rss.xml
-- **Google Research** - https://research.google/blog/rss
-- **Hugging Face** - https://huggingface.co/blog/feed.xml
-- **Meta AI Research** - https://research.facebook.com/feed
-
-### arXiv 논문 (AI 관련)
-- **cs.AI** - Artificial Intelligence
-- **cs.LG** - Machine Learning
-- **cs.CV** - Computer Vision
-- **cs.CL** - Natural Language Processing
-
-### 필터링 기준
-- ⏰ **24시간 이내** 발행된 글만 수집
-- 🔁 **7일 중복 체크** - 이미 아카이빙된 URL 제외
-- 📊 **중요도 7점 이상** - AI 개발자에게 유용한 기술 뉴스
-
-## 🎯 중요도 평가 기준
-
-AI 개발자/연구자 관점에서 기술 혁신에만 집중합니다:
-
-| 점수 | 기준 | 예시 |
-|------|------|------|
-| **9-10점** | 업계 판도를 바꿀 혁신 | GPT-5 출시, 새로운 아키텍처 발견 |
-| **7-8점** | 실무에 바로 쓸 수 있는 기술 | 새 API 출시, 오픈소스 도구 |
-| **5-6점** | 주목할 만한 업데이트 | 모델 성능 개선, 새 기능 추가 |
-| **3-4점** | 비즈니스 뉴스 | 펀딩, M&A, 파트너십 발표 |
-| **1-2점** | 관심 없음 | 회사 소식, 인터뷰, 마케팅 |
-
-**7점 미만은 수집하지 않습니다** - 기술적 가치가 있는 뉴스만 아카이빙
-
-## 🔧 개발 가이드
-
-### 새 모듈 추가
-
-1. 기능 파일 생성 (예: `new_feature.py`)
-2. `main.py`에 예제 메서드 추가
-3. 테스트 작성 (`tests/test_new_feature.py`)
-
-### 테스트 실행
+#### 방법 1: Python 스크립트
 
 ```bash
-pytest tests/ -v
+# 데일리뉴스
+python thread_generator.py --type news --input latest
+
+# 논문
+python thread_generator.py --type paper --input "https://arxiv.org/abs/2401.12345"
+
+# 기업분석
+python thread_generator.py --type company --input "OpenAI"
 ```
 
-## 📋 향후 계획
+#### 방법 2: Claude Code (권장)
 
-- [ ] Anthropic, Mistral, Cohere 블로그 추가
-- [ ] 주간/월간 요약 리포트 생성
-- [ ] Slack/Discord 알림 연동
-- [ ] 웹 대시보드 (아카이브 검색/필터링)
-- [ ] Meta Threads 자동 포스팅 연동
+```bash
+# 최신 뉴스
+claude "오늘 뉴스 스레드 만들어줘"
 
-## 📄 라이선스
+# 논문
+claude "https://arxiv.org/abs/2401.12345 논문 스레드로 만들어줘"
+
+# 기업
+claude "Anthropic 기업분석 스레드 만들어줘"
+```
+
+## 사용 예시
+
+### 데일리뉴스 → 스레드
+
+```bash
+$ python main.py
+✅ archive/2026-01-26.md 생성
+
+$ claude "2026-01-26.md 파일에서 스레드 만들어줘"
+✅ 스레드 생성 완료
+
+threads/news/20260126-d4rt/
+├── thread-01.md
+├── thread-02.md
+├── ...
+├── thread-07.md
+├── metadata.json
+└── review-report.md
+```
+
+**생성된 스레드 예시:**
+
+```markdown
+Google DeepMind가 기존보다 300배 빠른 속도로 4차원 세계를 재구성하는 기술을 내놨어요.
+
+왜 알아야 하냐면요,
+AI가 3차원을 넘어 시간까지 이해하면 영상 분석이나 로봇 비전이 완전히 달라지거든요.
+
+🧵 정리해드릴게요.
+```
+
+## 기술 스택
+
+### v1.0 (RSS 수집)
+- Python 3.11+
+- feedparser (RSS 파싱)
+- Groq API (AI 분석)
+- BeautifulSoup4 (이미지 추출)
+
+### v2.0 (스레드 생성)
+- Claude Code
+- Claude Sonnet 4.5
+- 8개 전문 에이전트
+
+## 스레드 스타일
+
+- **말투**: "요"체 (해요, 이에요, 거든요)
+- **길이**: 각 스레드 500자 이내
+- **구조**: 후킹 → 팩트 → 설명 → 의미 → CTA
+- **톤**: @jokerburg.builder 페르소나 (친근하면서 전문적)
+
+## GitHub Actions
+
+### 자동 실행
+- **RSS 수집**: 매일 오전 9시 (KST) 자동 실행
+- **스레드 생성**: 수동 트리거 또는 RSS 수집 완료 후 실행
+
+### Secrets 설정
+Repository Settings → Secrets → Actions에 추가:
+- `GROQ_API_KEY`: Groq API 키
+
+## 문서
+
+- [USAGE.md](USAGE.md) - 상세 사용 가이드
+- [references/style-guide.md](references/style-guide.md) - 스타일 가이드
+- [.claude/agents/](/.claude/agents/) - 에이전트 정의 파일
+
+## 로드맵
+
+- [x] v1.0: 9개 소스 RSS 수집 자동화
+- [x] v2.0: Claude Code Agents 스레드 생성
+- [ ] v3.0: Meta Threads API 자동 포스팅
+- [ ] 성과 분석 대시보드
+- [ ] 다국어 지원 (영문 스레드)
+
+## 라이선스
 
 MIT License
+
+---
+
+**Built with ❤️ for @jokerburg.builder**

@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(archive/**)",
+      "Read(threads/**)",
+      "Read(references/**)",
+      "Write(threads/**)",
+      "WebSearch",
+      "Bash(python *.py)"
+    ]
+  }
+}

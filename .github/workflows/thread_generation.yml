@@ -1,0 +1,60 @@
+name: Thread Generation
+
+on:
+  workflow_dispatch:
+    inputs:
+      type:
+        description: 'Content type'
+        required: true
+        type: choice
+        options:
+          - news
+          - paper
+          - company
+      input:
+        description: 'Input (date/URL/company name)'
+        required: true
+        type: string
+
+  # 뉴스는 daily_news 완료 후 자동 트리거
+  workflow_run:
+    workflows: ["Thread-Auto Daily Run"]
+    types:
+      - completed
+
+jobs:
+  generate-threads:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Show thread generation info
+        env:
+          CONTENT_TYPE: ${{ inputs.type || 'news' }}
+          INPUT_DATA: ${{ inputs.input || 'latest' }}
+        run: |
+          echo "=========================================="
+          echo "Thread Generation Request"
+          echo "=========================================="
+          echo "Content Type: $CONTENT_TYPE"
+          echo "Input: $INPUT_DATA"
+          echo ""
+          python thread_generator.py --type "$CONTENT_TYPE" --input "$INPUT_DATA"
+
+      - name: Summary
+        run: |
+          echo "✅ Thread generation routing complete"
+          echo ""
+          echo "📝 Agent files are ready in .claude/agents/"
+          echo "🎯 Follow the instructions above to use Claude Code agents"
+          echo ""
+          echo "📚 Available agents:"
+          ls -1 .claude/agents/
