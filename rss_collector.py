@@ -13,6 +13,7 @@ import feedparser
 DEFAULT_RSS_SOURCES = {
     # AI Company Blogs
     "openai": "https://openai.com/news/rss.xml",           # OpenAI official news
+    # "anthropic": No official RSS feed available - TODO: implement web scraper
     "deepmind": "https://deepmind.google/blog/rss.xml",     # Google DeepMind
     "google_research": "https://research.google/blog/rss",  # Google Research
     "huggingface": "https://huggingface.co/blog/feed.xml",  # Hugging Face blog
