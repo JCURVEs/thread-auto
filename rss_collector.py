@@ -13,7 +13,7 @@ import feedparser
 DEFAULT_RSS_SOURCES = {
     # AI Company Blogs
     "openai": "https://openai.com/news/rss.xml",           # OpenAI official news
-    # "anthropic": No official RSS feed available - TODO: implement web scraper
+    "anthropic": "https://www.anthropic.com/news",         # Web scraper (no RSS)
     "deepmind": "https://deepmind.google/blog/rss.xml",     # Google DeepMind
     "google_research": "https://research.google/blog/rss",  # Google Research
     "huggingface": "https://huggingface.co/blog/feed.xml",  # Hugging Face blog
@@ -50,6 +50,53 @@ def fetch_feed(url: str) -> Optional[feedparser.FeedParserDict]:
     except Exception as e:
         print(f"❌ RSS 피드 가져오기 실패: {e}")
         return None
+
+
+def fetch_feed_or_scrape(source_name: str, url: str) -> Optional[Any]:
+    """
+    Fetch content either via RSS feed or web scraping.
+
+    For sources without RSS feeds (like Anthropic), uses web scraping.
+    For sources with RSS feeds, uses standard feedparser.
+
+    Args:
+        source_name: The source identifier (e.g. "anthropic", "openai")
+        url: RSS feed URL or web page URL
+
+    Returns:
+        Parsed feed or mock feed object with entries, None if failed
+
+    Example:
+        >>> feed = fetch_feed_or_scrape("anthropic", "https://www.anthropic.com/news")
+        >>> entries = feed.entries
+    """
+    # Special handling for sources without RSS feeds
+    if source_name == "anthropic":
+        try:
+            from anthropic_scraper import fetch_anthropic_news
+
+            articles = fetch_anthropic_news()
+
+            if not articles:
+                return None
+
+            # Create a mock feed object compatible with feedparser structure
+            class MockFeed:
+                def __init__(self, entries):
+                    self.entries = entries
+                    self.bozo = False
+
+            return MockFeed(articles)
+
+        except ImportError:
+            print(f"❌ anthropic_scraper 모듈을 찾을 수 없습니다.")
+            return None
+        except Exception as e:
+            print(f"❌ Anthropic 스크래핑 실패: {e}")
+            return None
+
+    # Default: use RSS feed
+    return fetch_feed(url)
 
 
 def get_latest_entry(feed: feedparser.FeedParserDict) -> Optional[Dict[str, Any]]:

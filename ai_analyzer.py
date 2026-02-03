@@ -7,7 +7,8 @@ Supports Groq, OpenRouter, Gemini, and more.
 
 import json
 import os
-from typing import Dict, Any, Optional
+import unicodedata
+from typing import Dict, Any, Optional, Tuple
 
 # System prompt defining the 'AI Tech Newsletter Curator' persona
 SYSTEM_PROMPT = """
@@ -133,51 +134,136 @@ def _create_gemini_client(api_key: str, model: str):
         raise ImportError("google-generativeai package required")
 
 
-def generate_thread_content(client: Dict, title: str, description: str) -> Optional[Dict]:
+def generate_thread_content(client: Dict, title: str, description: str, max_retries: int = 2) -> Optional[Dict]:
     """
-    Generate newsletter content from news.
+    Generate newsletter content from news with foreign text validation.
     Now specifically follows the Newsletter format.
     """
     user_prompt = f"""
     [뉴스 원문]
     제목: {title}
     내용: {description}
-    
-    위 뉴스를 'Tech Newsletter Curator'의 관점에서 분석하여 JSON으로 작성해줘.
+
+    **중요**: 원문에 외국어(영어, 중국어, 일본어 등)가 포함되어 있다면 **반드시 한국어로 번역**해서 사용하세요.
+    기술 용어는 한글로 표기하고 필요시 원문을 괄호에 병기하세요. 예: "합성곱 신경망(Convolutional Neural Network)"
+
+    위 뉴스를 'Tech Newsletter Curator'의 관점에서 분석하여 **순수 한국어로만** JSON을 작성해줘.
     """
-    
-    try:
-        if client["type"] == "openai":
-            response = client["client"].chat.completions.create(
-                model=client["model"],
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": user_prompt}
-                ],
-                response_format={"type": "json_object"}
-            )
-            return json.loads(response.choices[0].message.content)
-            
-        elif client["type"] == "gemini":
-            response = client["client"].generate_content(user_prompt)
-            # Cleanup Markdown code blocks if present
-            raw = response.text.replace("```json", "").replace("```", "").strip()
-            return json.loads(raw)
-            
-        elif client["type"] == "requests":
-            import requests
-            headers = {"Authorization": f"Bearer {client['api_key']}", "Content-Type": "application/json"}
-            data = {
-                "model": client["model"],
-                "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": user_prompt}],
-                "response_format": {"type": "json_object"}
-            }
-            res = requests.post(f"{client['base_url']}/chat/completions", headers=headers, json=data)
-            return json.loads(res.json()["choices"][0]["message"]["content"])
-            
-    except Exception as e:
-        print(f"❌ AI 분석 에러: {e}")
-        return None
+
+    for attempt in range(max_retries):
+        try:
+            content = None
+
+            if client["type"] == "openai":
+                response = client["client"].chat.completions.create(
+                    model=client["model"],
+                    messages=[
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    response_format={"type": "json_object"}
+                )
+                content = json.loads(response.choices[0].message.content)
+
+            elif client["type"] == "gemini":
+                response = client["client"].generate_content(user_prompt)
+                # Cleanup Markdown code blocks if present
+                raw = response.text.replace("```json", "").replace("```", "").strip()
+                content = json.loads(raw)
+
+            elif client["type"] == "requests":
+                import requests
+                headers = {"Authorization": f"Bearer {client['api_key']}", "Content-Type": "application/json"}
+                data = {
+                    "model": client["model"],
+                    "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": user_prompt}],
+                    "response_format": {"type": "json_object"}
+                }
+                res = requests.post(f"{client['base_url']}/chat/completions", headers=headers, json=data)
+                content = json.loads(res.json()["choices"][0]["message"]["content"])
+
+            # Validate Korean content
+            if content:
+                is_valid, error_msg = validate_korean_content(content)
+                if not is_valid:
+                    print(f"⚠️ 외국어 감지 ({error_msg}) - 재시도 {attempt + 1}/{max_retries}")
+                    if attempt < max_retries - 1:
+                        continue  # Retry
+                    else:
+                        print(f"❌ 최대 재시도 초과 - 외국어 포함된 응답 사용")
+                        # Fall through to return content anyway
+
+            return content
+
+        except Exception as e:
+            print(f"❌ AI 분석 에러 (시도 {attempt + 1}/{max_retries}): {e}")
+            if attempt == max_retries - 1:
+                return None
+
+    return None
+
+
+def detect_foreign_text(text: str, threshold: float = 0.1) -> bool:
+    """
+    Detect if text contains significant foreign characters.
+
+    Args:
+        text: Text to analyze
+        threshold: Maximum allowed ratio of foreign characters (default: 10%)
+
+    Returns:
+        True if foreign text ratio exceeds threshold
+    """
+    if not text:
+        return False
+
+    total_chars = 0
+    foreign_chars = 0
+
+    for char in text:
+        # Skip whitespace and punctuation
+        if char.isspace() or not char.isalnum():
+            continue
+
+        total_chars += 1
+
+        # Check if character is NOT Hangul, Latin, or common symbols
+        try:
+            script = unicodedata.name(char, '').split()[0]
+            if script not in ['HANGUL', 'LATIN', 'DIGIT', 'FULLWIDTH']:
+                # Detect CJK, Cyrillic, Arabic, etc.
+                if script in ['CJK', 'HIRAGANA', 'KATAKANA', 'CYRILLIC', 'ARABIC', 'THAI']:
+                    foreign_chars += 1
+        except (ValueError, IndexError):
+            # Character without a name, skip
+            pass
+
+    if total_chars == 0:
+        return False
+
+    ratio = foreign_chars / total_chars
+    return ratio > threshold
+
+
+def validate_korean_content(content: Dict[str, Any]) -> Tuple[bool, str]:
+    """
+    Validate that content is primarily in Korean.
+
+    Returns:
+        (is_valid, error_message)
+    """
+    # Check all text fields
+    text_fields = ['title', 'summary', 'easy_explainer']
+
+    for field in text_fields:
+        if field not in content:
+            continue
+
+        text = content[field]
+        if detect_foreign_text(text):
+            return False, f"{field} contains foreign characters"
+
+    return True, ""
 
 
 def validate_content(content: Dict[str, Any]) -> bool:

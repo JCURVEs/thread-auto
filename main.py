@@ -11,12 +11,16 @@ Supports multiple FREE AI providers:
 """
 
 import os
+import re
 from typing import Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from time import mktime
 import feedparser
+from dateutil import parser as date_parser
 
 from rss_collector import (
     fetch_feed,
+    fetch_feed_or_scrape,
     get_latest_entry,
     get_entry_info,
     DEFAULT_RSS_SOURCES
@@ -51,6 +55,44 @@ def get_api_key() -> Optional[str]:
     return os.environ.get(config["env_key"])
 
 
+def parse_published_date_utc(entry: dict, link: str) -> Optional[datetime]:
+    """
+    Extract published date from RSS entry and normalize to UTC.
+
+    Returns:
+        datetime object in UTC, or None if no date found
+    """
+    # Try 1: parsed date fields
+    published_date = entry.get("published_parsed") or entry.get("updated_parsed")
+    if published_date:
+        # Convert struct_time to UTC datetime
+        dt = datetime.fromtimestamp(mktime(published_date), tz=timezone.utc)
+        return dt
+
+    # Try 2: string date fields
+    published_str = entry.get("published") or entry.get("updated")
+    if published_str:
+        try:
+            dt = date_parser.parse(published_str)
+            # If no timezone info, assume UTC
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            # Convert to UTC
+            return dt.astimezone(timezone.utc)
+        except Exception:
+            pass
+
+    # Try 3: extract from URL pattern (last resort)
+    url_date_match = re.search(r'/(\d{4})/(\d{1,2})/', link)
+    if url_date_match:
+        year, month = int(url_date_match.group(1)), int(url_date_match.group(2))
+        # Use middle of month for better accuracy
+        day = 15
+        return datetime(year, month, day, tzinfo=timezone.utc)
+
+    return None
+
+
 def process_single_source(source_name: str, rss_url: str, client: dict, model: str) -> bool:
     """
     Process a single RSS source.
@@ -61,11 +103,11 @@ def process_single_source(source_name: str, rss_url: str, client: dict, model: s
     print(f"📡 [{source_name.upper()}] {rss_url}")
     print(f"{'='*60}")
 
-    # Step 1: Fetch RSS feed
-    print(f"🔄 RSS 피드 확인 중...")
-    feed = fetch_feed(rss_url)
+    # Step 1: Fetch RSS feed or scrape web
+    print(f"🔄 콘텐츠 확인 중...")
+    feed = fetch_feed_or_scrape(source_name, rss_url)
     if not feed:
-        print(f"❌ RSS 피드를 가져올 수 없습니다.")
+        print(f"❌ 콘텐츠를 가져올 수 없습니다.")
         return False
 
     entry = get_latest_entry(feed)
@@ -75,16 +117,20 @@ def process_single_source(source_name: str, rss_url: str, client: dict, model: s
 
     info = get_entry_info(entry)
 
-    # Check 1: Published date (within 24 hours)
-    published_date = entry.get("published_parsed") or entry.get("updated_parsed")
-    if published_date:
-        from time import struct_time, mktime
-        published_dt = datetime.fromtimestamp(mktime(published_date))
-        age = datetime.now() - published_dt
+    # Check 1: Published date (within 24 hours, UTC-based)
+    published_dt = parse_published_date_utc(entry, info["link"])
+
+    if published_dt:
+        now_utc = datetime.now(timezone.utc)
+        age = now_utc - published_dt
 
         if age > timedelta(hours=24):
             print(f"⏰ 오래된 글 ({age.days}일 {age.seconds//3600}시간 전) - 스킵")
             return False
+    else:
+        # No date information - skip for safety
+        print(f"⚠️ 발행일 정보 없음 - 안전을 위해 스킵")
+        return False
 
     # Check 2: Duplicate URL
     if is_duplicate(info["link"]):

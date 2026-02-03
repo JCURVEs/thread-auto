@@ -2,13 +2,13 @@
 
 > AI 뉴스 수집부터 스레드 생성까지 - 완전 자동화 파이프라인
 
-Thread-Auto는 OpenAI, DeepMind, Google Research 등 주요 AI 회사 블로그에서 최신 기술 뉴스를 수집하고, Claude Code Agents를 활용해 @jokerburg.builder 계정용 스레드 시리즈를 자동 생성하는 시스템입니다.
+Thread-Auto는 OpenAI, Anthropic, DeepMind, Google Research 등 주요 AI 회사 블로그에서 최신 기술 뉴스를 수집하고, Claude Code Agents를 활용해 @jokerburg.builder 계정용 스레드 시리즈를 자동 생성하는 시스템입니다.
 
 ## 소개
 
 ### 주요 기능
 
-- **🔄 자동 뉴스 수집**: OpenAI, DeepMind, Google Research, Hugging Face, Meta AI, arXiv 등 9개 소스 (Anthropic RSS 준비 중)
+- **🔄 자동 뉴스 수집**: OpenAI, Anthropic, DeepMind, Google Research, Hugging Face, Meta AI, arXiv 등 10개 소스
 - **🤖 AI 분석**: Groq Llama 3.3 70B로 중요도 평가 및 분야 분류
 - **🧵 스레드 자동 생성**: Claude Code Agents로 3가지 콘텐츠 타입 지원
   - 📰 데일리뉴스 (5-7개 스레드)
@@ -25,7 +25,7 @@ Thread-Auto는 OpenAI, DeepMind, Google Research 등 주요 AI 회사 블로그�
 │  v1.0: RSS 수집 & 아카이빙                                  │
 └─────────────────────────────────────────────────────────────┘
               ↓
-    RSS 수집 (9개 소스)
+    RSS 수집 (10개 소스)
               ↓
     AI 분석 (중요도 평가)
               ↓
@@ -201,8 +201,8 @@ Repository Settings → Secrets → Actions에 추가:
 
 ## 로드맵
 
-- [x] v1.0: 9개 소스 RSS 수집 자동화
-- [ ] Anthropic 블로그 스크래퍼 추가 (RSS 미제공)
+- [x] v1.0: 10개 소스 RSS 수집 자동화
+- [x] Anthropic 블로그 스크래퍼 추가 (RSS 미제공)
 - [x] v2.0: Claude Code Agents 스레드 생성
 - [ ] v3.0: Meta Threads API 자동 포스팅
 - [ ] 성과 분석 대시보드
