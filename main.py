@@ -22,6 +22,7 @@ from rss_collector import (
     fetch_feed,
     fetch_feed_or_scrape,
     get_latest_entry,
+    get_entries,
     get_entry_info,
     DEFAULT_RSS_SOURCES
 )
@@ -93,61 +94,51 @@ def parse_published_date_utc(entry: dict, link: str) -> Optional[datetime]:
     return None
 
 
-def process_single_source(source_name: str, rss_url: str, client: dict, model: str) -> bool:
+# Maximum age for articles to be collected (48 hours covers weekend gaps)
+MAX_ARTICLE_AGE_HOURS = int(os.environ.get("MAX_ARTICLE_AGE_HOURS", "48"))
+# Number of recent entries to check per source
+ENTRIES_PER_SOURCE = int(os.environ.get("ENTRIES_PER_SOURCE", "5"))
+
+
+def process_single_entry(entry: dict, source_name: str, client: dict, model: str) -> bool:
     """
-    Process a single RSS source.
+    Process a single RSS entry.
 
-    Returns True if successful, False otherwise.
+    Returns True if successfully archived, False otherwise.
     """
-    print(f"\n{'='*60}")
-    print(f"📡 [{source_name.upper()}] {rss_url}")
-    print(f"{'='*60}")
-
-    # Step 1: Fetch RSS feed or scrape web
-    print(f"🔄 콘텐츠 확인 중...")
-    feed = fetch_feed_or_scrape(source_name, rss_url)
-    if not feed:
-        print(f"❌ 콘텐츠를 가져올 수 없습니다.")
-        return False
-
-    entry = get_latest_entry(feed)
-    if not entry:
-        print(f"⚠️ 새 글이 없습니다.")
-        return False
-
     info = get_entry_info(entry)
 
-    # Check 1: Published date (within 24 hours, UTC-based)
+    # Check 1: Published date (within MAX_ARTICLE_AGE_HOURS, UTC-based)
     published_dt = parse_published_date_utc(entry, info["link"])
 
     if published_dt:
         now_utc = datetime.now(timezone.utc)
         age = now_utc - published_dt
 
-        if age > timedelta(hours=24):
-            print(f"⏰ 오래된 글 ({age.days}일 {age.seconds//3600}시간 전) - 스킵")
+        if age > timedelta(hours=MAX_ARTICLE_AGE_HOURS):
+            print(f"  ⏰ 오래된 글 ({age.days}일 {age.seconds//3600}시간 전) - 스킵")
             return False
     else:
         # No date information - skip for safety
-        print(f"⚠️ 발행일 정보 없음 - 안전을 위해 스킵")
+        print(f"  ⚠️ 발행일 정보 없음 - 스킵")
         return False
 
     # Check 2: Duplicate URL
     if is_duplicate(info["link"]):
-        print(f"🔁 이미 수집된 글 - 스킵")
+        print(f"  🔁 이미 수집됨 - 스킵: {info['title'][:40]}")
         return False
 
-    print(f"✅ 최신 글: {info['title'][:60]}...")
+    print(f"  ✅ 수집 대상: {info['title'][:60]}")
 
     # Step 2: Extract image
     image_url = get_article_image(info["link"])
     if image_url:
-        print(f"✅ 이미지: {image_url[:50]}...")
+        print(f"  🖼️ 이미지: {image_url[:50]}...")
     else:
-        print("⚠️ 이미지 없음")
+        print("  ⚠️ 이미지 없음")
 
     # Step 3: AI Analysis
-    print(f"🤖 AI 분석 중...")
+    print(f"  🤖 AI 분석 중...")
     try:
         content = generate_thread_content(
             client,
@@ -155,16 +146,16 @@ def process_single_source(source_name: str, rss_url: str, client: dict, model: s
             info["description"]
         )
     except Exception as e:
-        print(f"❌ AI 분석 실패: {e}")
+        print(f"  ❌ AI 분석 실패: {e}")
         return False
 
     if not content or not validate_content(content):
-        print("❌ AI 분석 결과가 유효하지 않습니다.")
+        print("  ❌ AI 분석 결과가 유효하지 않습니다.")
         return False
 
-    print(f"✅ 분석 완료")
-    print(f"   📰 {content.get('title', '제목 없음')[:50]}...")
-    print(f"   🏷️  {content.get('category')} (중요도: {content.get('importance')}점)")
+    print(f"  ✅ 분석 완료")
+    print(f"     📰 {content.get('title', '제목 없음')[:50]}...")
+    print(f"     🏷️  {content.get('category')} (중요도: {content.get('importance')}점)")
 
     # Step 4: Archive
     try:
@@ -177,11 +168,53 @@ def process_single_source(source_name: str, rss_url: str, client: dict, model: s
             model,
             source_name  # Pass company name
         )
-        print(f"💾 아카이브 저장 완료")
+        print(f"  💾 아카이브 저장 완료")
         return True
     except Exception as e:
-        print(f"⚠️ 아카이빙 실패: {e}")
+        print(f"  ⚠️ 아카이빙 실패: {e}")
         return False
+
+
+def process_single_source(source_name: str, rss_url: str, client: dict, model: str) -> int:
+    """
+    Process a single RSS source, checking multiple recent entries.
+
+    Returns the number of successfully archived articles.
+    """
+    print(f"\n{'='*60}")
+    print(f"📡 [{source_name.upper()}] {rss_url}")
+    print(f"{'='*60}")
+
+    # Step 1: Fetch RSS feed or scrape web
+    print(f"🔄 콘텐츠 확인 중...")
+    feed = fetch_feed_or_scrape(source_name, rss_url)
+    if not feed:
+        print(f"❌ 콘텐츠를 가져올 수 없습니다.")
+        return 0
+
+    entries = get_entries(feed, count=ENTRIES_PER_SOURCE)
+    if not entries:
+        print(f"⚠️ 새 글이 없습니다.")
+        return 0
+
+    print(f"📋 최근 {len(entries)}개 글 확인 중 (최대 {MAX_ARTICLE_AGE_HOURS}시간 이내)...")
+
+    archived_count = 0
+    for i, entry in enumerate(entries, 1):
+        title = entry.get('title', '제목 없음')[:50]
+        print(f"\n  [{i}/{len(entries)}] {title}")
+        try:
+            if process_single_entry(entry, source_name, client, model):
+                archived_count += 1
+        except Exception as e:
+            print(f"  ❌ 예상치 못한 오류: {e}")
+
+    if archived_count > 0:
+        print(f"\n🎉 [{source_name.upper()}] {archived_count}개 글 수집 완료")
+    else:
+        print(f"\n⚠️ [{source_name.upper()}] 수집할 새 글이 없습니다.")
+
+    return archived_count
 
 
 def run_pipeline() -> None:
@@ -231,20 +264,27 @@ def run_pipeline() -> None:
         sources = list(DEFAULT_RSS_SOURCES.items())
 
     # Process each source
-    success_count = 0
+    total_articles = 0
+    source_results = []
     total_count = len(sources)
 
     for source_name, rss_url in sources:
         try:
-            if process_single_source(source_name, rss_url, client, model):
-                success_count += 1
+            count = process_single_source(source_name, rss_url, client, model)
+            total_articles += count
+            if count > 0:
+                source_results.append(f"{source_name}: {count}건")
         except Exception as e:
             print(f"❌ 예상치 못한 오류: {e}")
 
     # Summary
     print("\n" + "#" * 70)
     print(f"# PIPELINE 완료")
-    print(f"# 성공: {success_count}/{total_count} 소스")
+    print(f"# 수집된 기사: {total_articles}건 / {total_count}개 소스")
+    if source_results:
+        print(f"# 소스별: {', '.join(source_results)}")
+    else:
+        print(f"# ⚠️ 새로 수집된 기사가 없습니다.")
     print("#" * 70 + "\n")
 
 
