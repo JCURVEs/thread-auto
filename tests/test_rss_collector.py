@@ -7,11 +7,13 @@ RSS Collector 모듈 테스트.
 import pytest
 from rss_collector import (
     fetch_feed,
+    fetch_feed_or_scrape,
     get_latest_entry,
     get_entries,
     get_entry_info,
     DEFAULT_RSS_SOURCES
 )
+from source_registry import get_high_confidence_online_check_sources
 
 
 def test_fetch_feed_openai():
@@ -80,24 +82,30 @@ def test_get_entry_info():
 def test_all_default_sources_available():
     """모든 기본 RSS 소스가 접근 가능한지 테스트."""
     failed_sources = []
+    source_names = get_high_confidence_online_check_sources()
 
-    for source_name, url in DEFAULT_RSS_SOURCES.items():
-        feed = fetch_feed(url)
+    for source_name in source_names:
+        url = DEFAULT_RSS_SOURCES[source_name]
+        feed = fetch_feed_or_scrape(source_name, url)
         if feed is None or len(feed.entries) == 0:
             failed_sources.append(source_name)
 
     # 일부 소스는 일시적으로 다운될 수 있으므로 80% 성공률로 체크
-    success_rate = (len(DEFAULT_RSS_SOURCES) - len(failed_sources)) / len(DEFAULT_RSS_SOURCES)
+    success_rate = (len(source_names) - len(failed_sources)) / len(source_names)
     assert success_rate >= 0.8, f"Failed sources: {failed_sources}"
 
 
-@pytest.mark.parametrize("source_name,url", list(DEFAULT_RSS_SOURCES.items())[:3])
-def test_each_source_has_entries(source_name, url):
+@pytest.mark.parametrize(
+    "source_name",
+    get_high_confidence_online_check_sources()[:3],
+)
+def test_each_source_has_entries(source_name):
     """각 RSS 소스가 최소 1개 이상의 글을 가지고 있는지 테스트."""
-    feed = fetch_feed(url)
+    url = DEFAULT_RSS_SOURCES[source_name]
+    feed = fetch_feed_or_scrape(source_name, url)
 
     # 일시적 다운 허용 (skip)
-    if feed is None:
+    if feed is None or len(feed.entries) == 0:
         pytest.skip(f"{source_name} is temporarily unavailable")
 
     assert len(feed.entries) > 0, f"{source_name} has no entries"

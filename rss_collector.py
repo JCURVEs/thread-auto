@@ -6,25 +6,18 @@ Focused on breakthrough AI tech, new models, and research papers.
 """
 
 from typing import List, Dict, Any, Optional
+from datetime import datetime, timezone
+from urllib.parse import urljoin
 import feedparser
 
+from source_registry import (
+    get_enabled_sources,
+    get_source_config,
+    get_source_fetch_mode,
+)
 
-# AI-focused RSS feed sources (official company blogs & research)
-DEFAULT_RSS_SOURCES = {
-    # AI Company Blogs
-    "openai": "https://openai.com/news/rss.xml",           # OpenAI official news
-    "anthropic": "https://www.anthropic.com/news",         # Web scraper (no RSS)
-    "deepmind": "https://deepmind.google/blog/rss.xml",     # Google DeepMind
-    "google_research": "https://research.google/blog/rss",  # Google Research
-    "huggingface": "https://huggingface.co/blog/feed.xml",  # Hugging Face blog
-    "meta_research": "https://research.facebook.com/feed",  # Meta AI Research
 
-    # Research & Papers
-    "arxiv_ai": "https://rss.arxiv.org/rss/cs.AI",          # arXiv cs.AI
-    "arxiv_lg": "https://rss.arxiv.org/rss/cs.LG",          # arXiv cs.LG (Machine Learning)
-    "arxiv_cv": "https://rss.arxiv.org/rss/cs.CV",          # arXiv cs.CV (Computer Vision)
-    "arxiv_cl": "https://rss.arxiv.org/rss/cs.CL",          # arXiv cs.CL (Computation and Language/NLP)
-}
+DEFAULT_RSS_SOURCES = get_enabled_sources()
 
 
 def fetch_feed(url: str) -> Optional[feedparser.FeedParserDict]:
@@ -46,9 +39,32 @@ def fetch_feed(url: str) -> Optional[feedparser.FeedParserDict]:
         if feed.bozo:
             # Feed parsing had issues but may still contain entries
             print(f"⚠️ RSS 파싱 경고: {feed.bozo_exception}")
+            if not feed.entries:
+                fallback_feed = _fetch_feed_with_requests(url)
+                if fallback_feed is not None:
+                    return fallback_feed
         return feed
     except Exception as e:
         print(f"❌ RSS 피드 가져오기 실패: {e}")
+        return _fetch_feed_with_requests(url)
+
+
+def _fetch_feed_with_requests(url: str) -> Optional[feedparser.FeedParserDict]:
+    """Fetch a feed with requests when feedparser's URL opener fails."""
+    try:
+        import requests
+
+        headers = {
+            "User-Agent": "Thread-Auto/2.0 (+https://github.com/JCURVEs/thread-auto)"
+        }
+        response = requests.get(url, headers=headers, timeout=15)
+        response.raise_for_status()
+        feed = feedparser.parse(response.content)
+        if feed.bozo:
+            print(f"⚠️ RSS fallback 파싱 경고: {feed.bozo_exception}")
+        return feed
+    except Exception as e:
+        print(f"❌ RSS fallback 가져오기 실패: {e}")
         return None
 
 
@@ -70,6 +86,8 @@ def fetch_feed_or_scrape(source_name: str, url: str) -> Optional[Any]:
         >>> feed = fetch_feed_or_scrape("anthropic", "https://www.anthropic.com/news")
         >>> entries = feed.entries
     """
+    fetch_mode = get_source_fetch_mode(source_name)
+
     # Special handling for sources without RSS feeds
     if source_name == "anthropic":
         try:
@@ -95,8 +113,99 @@ def fetch_feed_or_scrape(source_name: str, url: str) -> Optional[Any]:
             print(f"❌ Anthropic 스크래핑 실패: {e}")
             return None
 
+    if fetch_mode == "html_listing":
+        return fetch_listing_page(source_name, url)
+
     # Default: use RSS feed
-    return fetch_feed(url)
+    feed = fetch_feed(url)
+    return filter_feed_entries(source_name, feed)
+
+
+def make_mock_feed(entries: List[Dict[str, Any]]) -> Any:
+    """Create a feed-like object compatible with feedparser outputs."""
+    class MockFeed:
+        def __init__(self, feed_entries):
+            self.entries = feed_entries
+            self.bozo = False
+
+    return MockFeed(entries)
+
+
+def filter_feed_entries(source_name: str, feed: Any) -> Optional[Any]:
+    """Filter broad RSS feeds by source registry topic keywords when configured."""
+    if not feed or not hasattr(feed, "entries"):
+        return feed
+
+    config = get_source_config(source_name)
+    keywords = tuple(config.get("topic_keywords", ()))
+    if not keywords:
+        return feed
+
+    filtered = []
+    for entry in feed.entries:
+        text = " ".join([
+            str(entry.get("title", "")),
+            str(entry.get("summary", "")),
+            str(entry.get("description", "")),
+            str(entry.get("link", "")),
+        ]).lower()
+        if any(keyword.lower() in text for keyword in keywords):
+            filtered.append(dict(entry))
+
+    return make_mock_feed(filtered)
+
+
+def fetch_listing_page(source_name: str, url: str, limit: int = 15) -> Optional[Any]:
+    """Scrape simple official blog listing pages into feed-like entries."""
+    try:
+        import requests
+        from bs4 import BeautifulSoup
+
+        config = get_source_config(source_name)
+        url_pattern = str(config.get("url_pattern", "")).lower()
+        headers = {
+            "User-Agent": "Thread-Auto/2.0 (+https://github.com/JCURVEs/thread-auto)"
+        }
+        response = requests.get(url, headers=headers, timeout=15)
+        response.raise_for_status()
+
+        soup = BeautifulSoup(response.text, "html.parser")
+        entries = []
+        seen_urls = set()
+
+        for anchor in soup.find_all("a", href=True):
+            if len(entries) >= limit:
+                break
+
+            title = " ".join(anchor.get_text(" ").split())
+            if len(title) < 12 or len(title) > 180:
+                continue
+            if title.lower().startswith(("skip to", "see all", "./")):
+                continue
+
+            link = urljoin(url, anchor["href"])
+            lower_link = link.lower()
+            if url_pattern and url_pattern not in lower_link:
+                continue
+            if link in seen_urls:
+                continue
+
+            seen_urls.add(link)
+            entries.append({
+                "title": title,
+                "link": link,
+                "summary": title,
+                "description": title,
+                "published": datetime.now(timezone.utc).isoformat(),
+            })
+
+        if not entries:
+            return None
+
+        return make_mock_feed(entries)
+    except Exception as e:
+        print(f"❌ HTML listing 스크래핑 실패 ({source_name}): {e}")
+        return None
 
 
 def get_latest_entry(feed: feedparser.FeedParserDict) -> Optional[Dict[str, Any]]:

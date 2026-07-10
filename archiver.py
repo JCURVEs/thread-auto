@@ -7,7 +7,25 @@ Handles saving news in the specific 'Newsletter Format' requested by the user.
 import os
 import glob
 from datetime import datetime
-from typing import Dict, Any, Optional, Set
+from typing import Dict, Any, Optional, Set, List
+
+
+def get_archive_dir() -> str:
+    """Get archive directory path."""
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "archive")
+
+
+def get_archive_month_dir(date: Optional[datetime] = None) -> str:
+    """Get year/month archive directory path."""
+    if date is None:
+        date = datetime.now()
+
+    return os.path.join(
+        get_archive_dir(),
+        date.strftime("%Y"),
+        date.strftime("%m월"),
+    )
+
 
 def get_archive_path(date: Optional[datetime] = None) -> str:
     """Get daily archive file path."""
@@ -15,11 +33,54 @@ def get_archive_path(date: Optional[datetime] = None) -> str:
         date = datetime.now()
 
     filename = date.strftime("%Y-%m-%d.md")
-    archive_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "archive")
+    archive_dir = get_archive_month_dir(date)
     if not os.path.exists(archive_dir):
-        os.makedirs(archive_dir)
+        os.makedirs(archive_dir, exist_ok=True)
 
     return os.path.join(archive_dir, filename)
+
+
+def list_archive_files() -> List[str]:
+    """List all archive markdown files, including year/month subdirectories."""
+    archive_dir = get_archive_dir()
+    if not os.path.exists(archive_dir):
+        return []
+
+    files = glob.glob(os.path.join(archive_dir, "**", "*.md"), recursive=True)
+    files.extend(glob.glob(os.path.join(archive_dir, "*.md")))
+    return sorted(set(files), key=_archive_sort_key, reverse=True)
+
+
+def _archive_sort_key(filepath: str) -> tuple:
+    """Sort archives by date in filename first, then modification time."""
+    basename = os.path.basename(filepath)
+    try:
+        archive_date = datetime.strptime(basename[:10], "%Y-%m-%d")
+        return (archive_date, os.path.getmtime(filepath))
+    except (ValueError, OSError):
+        try:
+            return (datetime.min, os.path.getmtime(filepath))
+        except OSError:
+            return (datetime.min, 0)
+
+
+def extract_source_url(line: str) -> Optional[str]:
+    """Extract a source URL from legacy and current archive lines."""
+    stripped = line.strip()
+    prefixes = (
+        "**출처:**",
+        "출처:",
+        "출처 :",
+        "전체링크 :",
+        "전체링크:",
+    )
+
+    for prefix in prefixes:
+        if stripped.startswith(prefix):
+            url = stripped[len(prefix):].strip()
+            return url or None
+
+    return None
 
 
 def get_archived_urls(days: int = 7) -> Set[str]:
@@ -32,23 +93,20 @@ def get_archived_urls(days: int = 7) -> Set[str]:
     Returns:
         Set of URLs already archived
     """
-    archive_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "archive")
+    archive_dir = get_archive_dir()
     if not os.path.exists(archive_dir):
         return set()
 
     archived_urls = set()
-    archive_files = glob.glob(os.path.join(archive_dir, "*.md"))
-
-    # Sort by modification time, get recent files
-    archive_files.sort(key=os.path.getmtime, reverse=True)
+    archive_files = list_archive_files()
     recent_files = archive_files[:days]
 
     for filepath in recent_files:
         try:
             with open(filepath, "r", encoding="utf-8") as f:
                 for line in f:
-                    if line.startswith("전체링크 :"):
-                        url = line.replace("전체링크 :", "").strip()
+                    url = extract_source_url(line)
+                    if url:
                         archived_urls.add(url)
         except Exception as e:
             print(f"⚠️ 아카이브 파일 읽기 실패 ({filepath}): {e}")
@@ -76,7 +134,9 @@ def save_to_archive(
     original_title: str, # Not used in output but kept for interface compatibility
     provider: str,
     model: str,
-    source_name: str = "Unknown"
+    source_name: str = "Unknown",
+    original_summary: Optional[str] = None,
+    article_content_used: bool = False
 ) -> str:
     """
     Save content in readable newsletter format with company name.
@@ -90,14 +150,15 @@ def save_to_archive(
     ![Image](url)
     ---
     """
-    filepath = get_archive_path()
+    archive_date = datetime.now()
+    filepath = get_archive_path(archive_date)
 
     # Prepare content block
     lines = []
 
     # Header for new file
     if not os.path.exists(filepath):
-        lines.append(f"# Daily AI Tech News ({datetime.now().strftime('%Y-%m-%d')})\n\n")
+        lines.append(f"# Daily AI Tech News ({archive_date.strftime('%Y-%m-%d')})\n\n")
         lines.append("*Collected from OpenAI, Anthropic, DeepMind, Google Research, Hugging Face, Meta AI, arXiv*\n\n")
         lines.append("---\n\n")
 
@@ -109,6 +170,15 @@ def save_to_archive(
         "google_research": "Google Research",
         "huggingface": "Hugging Face",
         "meta_research": "Meta AI",
+        "nvidia_technical": "NVIDIA",
+        "nvidia_developer_ai": "NVIDIA",
+        "amd_rocm": "AMD ROCm",
+        "microsoft_research": "Microsoft Research",
+        "azure_ai": "Azure AI",
+        "aws_machine_learning": "AWS ML",
+        "google_cloud_ai": "Google Cloud AI",
+        "microsoft_ai": "Microsoft AI",
+        "perplexity": "Perplexity",
         "arxiv_ai": "arXiv AI",
         "arxiv_lg": "arXiv ML",
         "arxiv_cv": "arXiv Vision",
@@ -126,6 +196,12 @@ def save_to_archive(
     importance = data.get('importance', 5)
     lines.append(f"**분야:** {category} | **중요도:** {importance}점\n\n")
 
+    if "importance_original" in data:
+        reason = data.get("importance_adjusted_reason", "rule_based_calibration")
+        lines.append(
+            f"**중요도보정:** {data['importance_original']}점 → {importance}점 ({reason})\n\n"
+        )
+
     # Summary
     summary = data.get('summary', '요약 없음')
     lines.append(f"**요약:**  \n{summary}\n\n")
@@ -136,6 +212,13 @@ def save_to_archive(
 
     # Source URL
     lines.append(f"**출처:** {source_url}\n\n")
+
+    # Source metadata for debugging curation quality
+    if original_title:
+        lines.append(f"**원문제목:** {original_title}\n\n")
+    lines.append(f"**본문분석:** {'사용' if article_content_used else '미사용'}\n\n")
+    if original_summary:
+        lines.append(f"**RSS요약:**  \n{original_summary}\n\n")
 
     # Image
     if image_url:

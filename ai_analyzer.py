@@ -7,8 +7,9 @@ Supports Groq, OpenRouter, Gemini, and more.
 
 import json
 import os
+import re
 import unicodedata
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple, List
 
 # System prompt defining the 'AI Tech Newsletter Curator' persona
 SYSTEM_PROMPT = """
@@ -134,18 +135,35 @@ def _create_gemini_client(api_key: str, model: str):
         raise ImportError("google-generativeai package required")
 
 
-def generate_thread_content(client: Dict, title: str, description: str, max_retries: int = 2) -> Optional[Dict]:
+def generate_thread_content(
+    client: Dict,
+    title: str,
+    description: str,
+    article_content: str = "",
+    max_retries: int = 2
+) -> Optional[Dict]:
     """
     Generate newsletter content from news with foreign text validation.
     Now specifically follows the Newsletter format.
     """
+    article_section = ""
+    if article_content:
+        article_section = f"""
+
+    [기사 본문]
+    {article_content}
+    """
+
     user_prompt = f"""
     [뉴스 원문]
     제목: {title}
-    내용: {description}
+    RSS 요약: {description}
+    {article_section}
 
     **중요**: 원문에 외국어(영어, 중국어, 일본어 등)가 포함되어 있다면 **반드시 한국어로 번역**해서 사용하세요.
     기술 용어는 한글로 표기하고 필요시 원문을 괄호에 병기하세요. 예: "합성곱 신경망(Convolutional Neural Network)"
+    기사 본문이 제공된 경우에는 RSS 요약보다 기사 본문을 우선 근거로 삼으세요.
+    본문에 없는 성능 수치, 모델명, 발표 내용은 추측하지 마세요.
 
     위 뉴스를 'Tech Newsletter Curator'의 관점에서 분석하여 **순수 한국어로만** JSON을 작성해줘.
     """
@@ -201,6 +219,227 @@ def generate_thread_content(client: Dict, title: str, description: str, max_retr
                 return None
 
     return None
+
+
+BUSINESS_KEYWORDS = (
+    "funding", "raises", "raised", "series a", "series b", "investment",
+    "valuation", "m&a", "acquisition", "acquires", "acquired", "partnership",
+    "customer", "customers", "case study", "adoption", "government",
+    "payments", "policy", "privacy policy", "hiring", "jobs",
+    "투자", "펀딩", "인수", "합병", "파트너십", "제휴", "고객사", "도입",
+    "정부", "정책", "채용", "결제", "사례"
+)
+
+PRACTICAL_TECH_KEYWORDS = (
+    "open-source", "open source", "오픈소스", "github", "code", "코드",
+    "api", "sdk", "library", "라이브러리",
+    "benchmark", "벤치마크", "dataset", "데이터셋", "release", "released",
+    "공개", "출시", "available", "사용 가능", "throughput", "latency",
+    "speed", "faster", "memory", "gpu", "tokens/s", "정확도", "속도",
+    "지연", "처리량", "메모리", "성능"
+)
+
+BREAKTHROUGH_KEYWORDS = (
+    "sota", "state-of-the-art", "frontier model", "foundation model",
+    "new model", "model release", "outperforms", "beats", "surpasses",
+    "2x", "3x", "10x", "배 빠", "배 향상", "최고 성능", "프론티어 모델",
+    "새 모델", "모델 출시"
+)
+
+ALLOWED_CATEGORIES = {
+    "LLM 출시",
+    "비전/멀티모달",
+    "오픈소스 도구",
+    "연구 논문",
+    "API/인프라",
+    "에이전트/자동화",
+    "비즈니스",
+}
+
+FORBIDDEN_STYLE_EXPRESSIONS = (
+    "혁신적인",
+    "획기적인",
+    "놀라운",
+    "정말",
+    "매우",
+    "엄청",
+    "할 수 있습니다",
+    "하게 됩니다",
+    "이것은",
+)
+
+OVERCLAIM_EXPRESSIONS = (
+    "완전히 바꿉니다",
+    "완전히 달라집니다",
+    "무조건",
+    "반드시 성공",
+    "업계 판도를 바꿉니다",
+)
+
+
+def _coerce_importance(value: Any) -> int:
+    """Normalize model-provided importance into a 1-10 integer."""
+    if isinstance(value, (int, float)):
+        score = int(value)
+    else:
+        match = re.search(r"\d+", str(value))
+        score = int(match.group(0)) if match else 5
+
+    return max(1, min(10, score))
+
+
+def _contains_any(text: str, keywords: Tuple[str, ...]) -> bool:
+    return any(keyword in text for keyword in keywords)
+
+
+def _has_substantial_metric(text: str) -> bool:
+    """Detect concrete performance numbers rather than vague hype."""
+    patterns = (
+        r"\b\d+(\.\d+)?\s?%",
+        r"\b\d+(\.\d+)?x\b",
+        r"\b\d+(\.\d+)?\s?배",
+        r"\b\d+(\.\d+)?\s?(ms|tokens/s|tok/s|gb|fps)\b",
+    )
+    return any(re.search(pattern, text) for pattern in patterns)
+
+
+def calibrate_importance(
+    content: Dict[str, Any],
+    source_name: str = "",
+    original_title: str = "",
+    original_summary: str = "",
+    article_content: str = "",
+    source_weight: Optional[float] = None,
+) -> Dict[str, Any]:
+    """
+    Apply source-aware importance calibration after AI scoring.
+
+    The model is useful for first-pass judgement, but it tends to overrate
+    generic arXiv abstracts and business announcements. This function lowers
+    weak items and allows a small boost for high-signal infrastructure/platform
+    sources when practical technical evidence is present.
+    """
+    original_importance = _coerce_importance(content.get("importance", 5))
+    importance = original_importance
+    category = str(content.get("category", ""))
+    source = source_name.lower()
+    if source_weight is None:
+        try:
+            from source_registry import get_source_weight
+
+            source_weight = get_source_weight(source_name)
+        except Exception:
+            source_weight = 1.0
+
+    evidence_text = " ".join([
+        str(content.get("title", "")),
+        str(content.get("summary", "")),
+        str(content.get("easy_explainer", "")),
+        original_title,
+        original_summary,
+        article_content,
+    ]).lower()
+
+    cap = 10
+    reasons = []
+
+    if category == "비즈니스":
+        cap = min(cap, 3)
+        reasons.append("business_category_cap")
+    elif _contains_any(evidence_text, BUSINESS_KEYWORDS):
+        cap = min(cap, 4)
+        reasons.append("business_signal_cap")
+
+    has_practical_signal = _contains_any(evidence_text, PRACTICAL_TECH_KEYWORDS)
+    has_breakthrough_signal = (
+        _contains_any(evidence_text, BREAKTHROUGH_KEYWORDS)
+        or _has_substantial_metric(evidence_text)
+    )
+
+    if source.startswith("arxiv"):
+        research_cap = 6
+        if has_practical_signal:
+            research_cap = 8
+        if has_breakthrough_signal and has_practical_signal:
+            research_cap = 9
+        cap = min(cap, research_cap)
+        if research_cap < 8:
+            reasons.append("generic_arxiv_cap")
+    elif category == "연구 논문" and not has_practical_signal:
+        cap = min(cap, 6)
+        reasons.append("generic_research_cap")
+
+    importance = min(importance, cap)
+
+    if (
+        source_weight >= 1.1
+        and 7 <= importance <= 8
+        and has_practical_signal
+        and category != "비즈니스"
+        and not source.startswith("arxiv")
+    ):
+        boosted_importance = min(10, importance + 1)
+        if boosted_importance != importance:
+            importance = boosted_importance
+            reasons.append("source_weight_boost")
+
+    content["importance"] = importance
+    content["source_weight"] = source_weight
+
+    if importance != original_importance:
+        content["importance_original"] = original_importance
+        content["importance_adjusted_reason"] = ", ".join(reasons)
+
+    return content
+
+
+def validate_quality_gate(content: Dict[str, Any]) -> Tuple[bool, List[str]]:
+    """
+    Final quality gate before archiving AI analysis.
+
+    This blocks structurally valid but low-quality output, especially foreign
+    text leakage and style-guide violations that hurt downstream thread drafts.
+    """
+    errors = []
+
+    if not validate_content(content):
+        return False, ["missing_required_fields"]
+
+    for field in ("title", "summary", "easy_explainer"):
+        value = str(content.get(field, "")).strip()
+        if not value:
+            errors.append(f"{field}_empty")
+        elif value in ("요약 없음", "설명 없음", "제목 없음"):
+            errors.append(f"{field}_placeholder")
+
+    is_korean_valid, korean_error = validate_korean_content(content)
+    if not is_korean_valid:
+        errors.append(korean_error)
+
+    category = content.get("category")
+    if category not in ALLOWED_CATEGORIES:
+        errors.append(f"invalid_category:{category}")
+
+    importance = _coerce_importance(content.get("importance", 5))
+    if importance != content.get("importance"):
+        content["importance"] = importance
+    if not 1 <= importance <= 10:
+        errors.append("importance_out_of_range")
+
+    text = " ".join(
+        str(content.get(field, ""))
+        for field in ("title", "summary", "easy_explainer")
+    )
+
+    for expression in FORBIDDEN_STYLE_EXPRESSIONS:
+        if expression in text:
+            errors.append(f"forbidden_style:{expression}")
+
+    for expression in OVERCLAIM_EXPRESSIONS:
+        if expression in text:
+            errors.append(f"overclaim:{expression}")
+
+    return len(errors) == 0, errors
 
 
 def detect_foreign_text(text: str, threshold: float = 0.1) -> bool:

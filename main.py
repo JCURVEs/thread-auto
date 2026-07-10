@@ -21,6 +21,7 @@ from dateutil import parser as date_parser
 from rss_collector import (
     fetch_feed,
     fetch_feed_or_scrape,
+    fetch_article_content,
     get_latest_entry,
     get_entries,
     get_entry_info,
@@ -30,13 +31,16 @@ from image_extractor import get_article_image
 from ai_analyzer import (
     create_client,
     generate_thread_content,
+    calibrate_importance,
     validate_content,
+    validate_quality_gate,
     get_provider_info,
     PROVIDERS,
     DEFAULT_PROVIDER
 )
 from thread_formatter import print_dry_run, post_to_threads
 from archiver import save_to_archive, is_duplicate
+from source_registry import calculate_collection_score, get_disabled_sources
 
 
 # --- Configuration ---
@@ -100,6 +104,15 @@ MAX_ARTICLE_AGE_HOURS = int(os.environ.get("MAX_ARTICLE_AGE_HOURS", "48"))
 ENTRIES_PER_SOURCE = int(os.environ.get("ENTRIES_PER_SOURCE", "5"))
 
 
+def is_usable_article_content(article_content: str) -> bool:
+    """Return True when scraped article text is useful for AI analysis."""
+    if not article_content:
+        return False
+    if article_content.startswith("본문 추출 실패"):
+        return False
+    return len(article_content.strip()) >= 200
+
+
 def process_single_entry(entry: dict, source_name: str, client: dict, model: str) -> bool:
     """
     Process a single RSS entry.
@@ -137,13 +150,23 @@ def process_single_entry(entry: dict, source_name: str, client: dict, model: str
     else:
         print("  ⚠️ 이미지 없음")
 
-    # Step 3: AI Analysis
+    # Step 3: Fetch full article text for better analysis
+    print(f"  📄 본문 추출 중...")
+    article_content = fetch_article_content(info["link"])
+    article_content_used = is_usable_article_content(article_content)
+    if article_content_used:
+        print(f"  ✅ 본문 추출 완료 ({len(article_content)}자)")
+    else:
+        print(f"  ⚠️ 본문 추출 실패/부족 - RSS 요약으로 분석")
+
+    # Step 4: AI Analysis
     print(f"  🤖 AI 분석 중...")
     try:
         content = generate_thread_content(
             client,
             info["title"],
-            info["description"]
+            info["description"],
+            article_content if article_content_used else ""
         )
     except Exception as e:
         print(f"  ❌ AI 분석 실패: {e}")
@@ -153,11 +176,30 @@ def process_single_entry(entry: dict, source_name: str, client: dict, model: str
         print("  ❌ AI 분석 결과가 유효하지 않습니다.")
         return False
 
+    content = calibrate_importance(
+        content,
+        source_name=source_name,
+        original_title=info["title"],
+        original_summary=info["description"],
+        article_content=article_content if article_content_used else ""
+    )
+
+    is_quality_valid, quality_errors = validate_quality_gate(content)
+    if not is_quality_valid:
+        print(f"  ❌ 품질 게이트 실패: {', '.join(quality_errors)}")
+        return False
+
     print(f"  ✅ 분석 완료")
     print(f"     📰 {content.get('title', '제목 없음')[:50]}...")
-    print(f"     🏷️  {content.get('category')} (중요도: {content.get('importance')}점)")
+    if "importance_original" in content:
+        print(
+            f"     🏷️  {content.get('category')} "
+            f"(중요도: {content.get('importance_original')}→{content.get('importance')}점)"
+        )
+    else:
+        print(f"     🏷️  {content.get('category')} (중요도: {content.get('importance')}점)")
 
-    # Step 4: Archive
+    # Step 5: Archive
     try:
         save_to_archive(
             content,
@@ -166,7 +208,9 @@ def process_single_entry(entry: dict, source_name: str, client: dict, model: str
             info["title"],
             AI_PROVIDER,
             model,
-            source_name  # Pass company name
+            source_name,  # Pass company name
+            original_summary=info["description"],
+            article_content_used=article_content_used
         )
         print(f"  💾 아카이브 저장 완료")
         return True
@@ -260,6 +304,11 @@ def run_pipeline() -> None:
         # Multi-source mode (all AI blogs)
         print(f"# Mode: Multi-Source (all AI company blogs)")
         print(f"# Sources: {len(DEFAULT_RSS_SOURCES)}")
+        print(f"# Collection Score: {calculate_collection_score()}/100")
+        disabled_sources = get_disabled_sources()
+        if disabled_sources:
+            disabled_names = ", ".join(disabled_sources.keys())
+            print(f"# Disabled Sources: {disabled_names}")
         print("#" * 70)
         sources = list(DEFAULT_RSS_SOURCES.items())
 

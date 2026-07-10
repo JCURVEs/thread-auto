@@ -181,7 +181,7 @@ ls -la .claude/agents/
 ```bash
 # 먼저 daily_news 워크플로우 실행
 # 또는 기존 아카이브 파일 확인
-ls archive/
+ls archive/2026/01월/
 ```
 
 ## 다음 단계

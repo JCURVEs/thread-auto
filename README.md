@@ -1,217 +1,297 @@
-# Thread-Auto v2.0
+# Thread-Auto
 
-> AI 뉴스 수집부터 스레드 생성까지 - 완전 자동화 파이프라인
+AI/테크 뉴스와 논문 후보를 수집하고, Threads에 올릴 수 있는 멀티스레드 초안까지 만드는 개인용 콘텐츠 파이프라인입니다.
 
-Thread-Auto는 OpenAI, Anthropic, DeepMind, Google Research 등 주요 AI 회사 블로그에서 최신 기술 뉴스를 수집하고, Claude Code Agents를 활용해 @jokerburg.builder 계정용 스레드 시리즈를 자동 생성하는 시스템입니다.
+현재 목표는 자동 게시가 아니라 다음 흐름입니다.
 
-## 소개
-
-### 주요 기능
-
-- **🔄 자동 뉴스 수집**: OpenAI, Anthropic, DeepMind, Google Research, Hugging Face, Meta AI, arXiv 등 10개 소스
-- **🤖 AI 분석**: Groq Llama 3.3 70B로 중요도 평가 및 분야 분류
-- **🧵 스레드 자동 생성**: Claude Code Agents로 3가지 콘텐츠 타입 지원
-  - 📰 데일리뉴스 (5-7개 스레드)
-  - 📄 arXiv 논문 (7-10개 스레드)
-  - 🏢 기업분석 (10-15개 스레드)
-- **✅ 품질 검수**: 자동 스타일 검수 및 팩트 체크
-
-## 아키텍처
-
-### 전체 흐름
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  v1.0: RSS 수집 & 아카이빙                                  │
-└─────────────────────────────────────────────────────────────┘
-              ↓
-    RSS 수집 (10개 소스)
-              ↓
-    AI 분석 (중요도 평가)
-              ↓
-    archive/YYYY-MM-DD.md
-              ↓
-┌─────────────────────────────────────────────────────────────┐
-│  v2.0: Claude Code Agents                                    │
-└─────────────────────────────────────────────────────────────┘
-              ↓
-    orchestrator.md (입력 분류)
-              ↓
-    ┌─────────┬─────────┬──────────┐
-    │  뉴스   │  논문   │  기업    │
-    │  팀     │  팀     │  팀      │
-    └─────────┴─────────┴──────────┘
-              ↓
-    reviewer.md (품질 검수)
-              ↓
-    threads/{type}/YYYYMMDD-{slug}/
+```text
+공식 소스 수집
+→ 본문/RSS 요약 분석
+→ 연도/월별 아카이브 저장
+→ 스레드 초안 생성
+→ 게시 전 품질 검수
 ```
 
-### 에이전트 구조
+## 현재 상태
 
-| 에이전트 | 역할 |
-|---------|------|
-| `orchestrator.md` | 입력 분류 및 라우팅 (뉴스/논문/기업) |
-| `news-curator.md` | archive에서 스레드 후보 선별 |
-| `news-thread-writer.md` | 뉴스 스레드 작성 |
-| `paper-analyzer.md` | arXiv 논문 분석 |
-| `paper-thread-writer.md` | 논문 스레드 작성 |
-| `company-researcher.md` | 기업 리서치 |
-| `company-thread-writer.md` | 기업 스레드 작성 |
-| `reviewer.md` | 품질 검수 및 승인 |
+- 17개 활성 소스 기반 수집망
+- source_registry 기반 소스 가중치/커버리지 관리
+- 수집 커버리지 점수 100/100
+- 연도/월별 아카이브 구조
+- 중요도 보정 및 품질 게이트
+- @jokerburg.builder 스타일의 스레드 초안 생성
+- 게시 전 리뷰 리포트 생성
+- Meta Threads 자동 게시 기능은 아직 적용하지 않음
 
-### 디렉토리 구조
+## 수집 소스
 
-```
-thread-auto/
-├── .github/workflows/
-│   ├── daily_news.yml           # 매일 9시 RSS 수집
-│   └── thread_generation.yml    # 스레드 생성 워크플로우
-├── .claude/agents/              # 8개 에이전트 정의
-├── references/                  # 스타일 가이드
-├── archive/                     # 일별 뉴스 아카이브
-├── threads/                     # 생성된 스레드
-│   ├── news/
-│   ├── papers/
-│   └── companies/
-├── main.py                      # v1.0 RSS 수집 파이프라인
-└── thread_generator.py          # v2.0 스레드 생성 스크립트
+소스는 [source_registry.py](source_registry.py)에서 관리합니다.
+
+### Frontier / Research
+
+```text
+openai
+anthropic
+deepmind
+google_research
+huggingface
+meta_research
 ```
 
-## 빠른 시작
+### 인프라 / 칩
 
-### 1. 설치
+```text
+nvidia_technical
+nvidia_developer_ai
+amd_rocm
+```
+
+### 클라우드 / 플랫폼
+
+```text
+microsoft_research
+azure_ai
+aws_machine_learning
+google_cloud_ai
+```
+
+### 논문
+
+```text
+arxiv_ai
+arxiv_lg
+arxiv_cv
+arxiv_cl
+```
+
+### 등록했지만 기본 비활성
+
+```text
+microsoft_ai
+perplexity
+```
+
+두 소스는 registry에 남겨두었지만, 자동 검증 기준으로 안정적인 수집이 어려워 기본 수집 대상에서는 제외했습니다.
+
+## 소스 가중치
+
+단순히 많이 긁는 방식이 아니라, 소스별 성격을 반영합니다.
+
+```text
+frontier_lab
+infra_chip
+cloud_platform
+research_lab
+developer_ecosystem
+paper_research
+```
+
+예를 들어 NVIDIA, AWS Machine Learning, Microsoft Research 같은 실무 임팩트가 큰 소스는 기본보다 높은 가중치를 가집니다.  
+단, 비즈니스/파트너십성 글은 중요도 보정에서 낮게 제한됩니다.
+
+## 아카이브 구조
+
+수집된 글은 연도와 월 단위로 저장됩니다.
+
+```text
+archive/
+└── 2026/
+    ├── 01월/
+    ├── 02월/
+    ├── 03월/
+    ├── 04월/
+    ├── 05월/
+    ├── 06월/
+    ├── 07월/
+    ├── 08월/
+    ├── 09월/
+    ├── 10월/
+    ├── 11월/
+    └── 12월/
+```
+
+파일명은 일자 기준입니다.
+
+```text
+archive/2026/07월/2026-07-09.md
+```
+
+## 스레드 초안 포맷
+
+뉴스 스레드는 총 9개 파일로 생성됩니다.
+
+```text
+thread-01.md  제목
+thread-02.md  후킹 5줄
+thread-03.md  1/
+thread-04.md  2/
+thread-05.md  3/
+thread-06.md  4/
+thread-07.md  5/
+thread-08.md  6/
+thread-09.md  7/
+```
+
+본문은 다음 흐름을 따릅니다.
+
+```text
+1/ 기존 상식 뒤집기
+2/ 문제/병목
+3/ 핵심 접근법
+4/ 구현 방식
+5/ 기술 원리
+6/ 결과/성과
+7/ 미래 전망/임팩트
+```
+
+각 `1/`~`7/` 소제목은 구조명이 아니라 실제 내용이 담긴 문장으로 생성됩니다.
+
+## 스타일 기준
+
+스타일은 [references/style-guide.md](references/style-guide.md)에 공개 가능한 규칙만 저장합니다.
+
+핵심 리듬:
+
+```text
+겉보기엔 ...
+근데 뜯어보면 ...
+핵심은 이겁니다.
+먼저 용어부터.
+쉽게 말하면 ...
+```
+
+원본 프롬프트나 개인 샘플 전문은 저장하지 않습니다.
+
+## 품질 검수
+
+생성된 초안은 `review-report.md`를 함께 만듭니다.
+
+검수 항목:
+
+- 9개 포스트 구조 확인
+- 제목 한 줄 여부
+- 후킹 5줄 여부
+- 마지막 줄 `핵심내용 정리했습니다🧵` 확인
+- `1/`~`7/` 넘버링 확인
+- 각 슬라이드 7~9줄 확인
+- 500자 초과 여부 확인
+- 과장 표현 차단
+- 근거 없는 숫자 성과 차단
+- 출처 URL 포함 여부 확인
+
+`metadata.json`에도 리뷰 상태가 저장됩니다.
+
+```json
+{
+  "review_status": "READY_FOR_HUMAN_REVIEW",
+  "review_blocking_count": 0,
+  "review_warning_count": 0
+}
+```
+
+## 설치
 
 ```bash
-git clone https://github.com/jojaehui/thread-auto.git
+git clone https://github.com/JCURVEs/thread-auto.git
 cd thread-auto
+python -m venv .venv
+.venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 2. 환경 변수 설정
+## 환경 변수
+
+기본 AI 분석 provider는 Groq입니다.
 
 ```bash
-export GROQ_API_KEY="gsk_..."        # Groq API 키 (무료)
-export COLLECT_ALL_SOURCES="true"    # 모든 소스 수집
+set GROQ_API_KEY=your_key
+set COLLECT_ALL_SOURCES=true
 ```
 
-### 3. RSS 수집 실행
+선택 옵션:
 
 ```bash
-# 뉴스 수집 및 아카이빙
+set AI_PROVIDER=groq
+set AI_MODEL=
+set MAX_ARTICLE_AGE_HOURS=48
+set ENTRIES_PER_SOURCE=5
+```
+
+## 실행
+
+### 뉴스 수집
+
+```bash
 python main.py
 ```
 
-결과: `archive/YYYY-MM-DD.md` 파일 생성
+실행 시 현재 수집망 정보가 출력됩니다.
 
-### 4. 스레드 생성
+```text
+Sources: 17
+Collection Score: 100/100
+Disabled Sources: microsoft_ai, perplexity
+```
 
-#### 방법 1: Python 스크립트
+### 최신 아카이브에서 스레드 초안 생성
 
 ```bash
-# 데일리뉴스
 python thread_generator.py --type news --input latest
-
-# 논문
-python thread_generator.py --type paper --input "https://arxiv.org/abs/2401.12345"
-
-# 기업분석
-python thread_generator.py --type company --input "OpenAI"
 ```
 
-#### 방법 2: Claude Code (권장)
+### 특정 날짜 아카이브에서 생성
 
 ```bash
-# 최신 뉴스
-claude "오늘 뉴스 스레드 만들어줘"
-
-# 논문
-claude "https://arxiv.org/abs/2401.12345 논문 스레드로 만들어줘"
-
-# 기업
-claude "Anthropic 기업분석 스레드 만들어줘"
+python thread_generator.py --type news --input 2026-07-09
 ```
 
-## 사용 예시
+출력 예시:
 
-### 데일리뉴스 → 스레드
-
-```bash
-$ python main.py
-✅ archive/2026-01-26.md 생성
-
-$ claude "2026-01-26.md 파일에서 스레드 만들어줘"
-✅ 스레드 생성 완료
-
-threads/news/20260126-d4rt/
+```text
+threads/news/20260709-native-speed-vllm-transformers-backe-f2a336/
 ├── thread-01.md
 ├── thread-02.md
 ├── ...
-├── thread-07.md
+├── thread-09.md
 ├── metadata.json
 └── review-report.md
 ```
 
-**생성된 스레드 예시:**
+## 테스트
 
-```markdown
-Google DeepMind가 기존보다 300배 빠른 속도로 4차원 세계를 재구성하는 기술을 내놨어요.
+전체 테스트:
 
-왜 알아야 하냐면요,
-AI가 3차원을 넘어 시간까지 이해하면 영상 분석이나 로봇 비전이 완전히 달라지거든요.
-
-🧵 정리해드릴게요.
+```bash
+python -m pytest -q
 ```
 
-## 기술 스택
+네트워크 소스 테스트는 공식 RSS/웹 페이지 상태에 영향을 받을 수 있습니다.
 
-### v1.0 (RSS 수집)
-- Python 3.11+
-- feedparser (RSS 파싱)
-- Groq API (AI 분석)
-- BeautifulSoup4 (이미지 추출)
+## 주요 파일
 
-### v2.0 (스레드 생성)
-- Claude Code
-- Claude Sonnet 4.5
-- 8개 전문 에이전트
-
-## 스레드 스타일
-
-- **말투**: "요"체 (해요, 이에요, 거든요)
-- **길이**: 각 스레드 500자 이내
-- **구조**: 후킹 → 팩트 → 설명 → 의미 → CTA
-- **톤**: @jokerburg.builder 페르소나 (친근하면서 전문적)
-
-## GitHub Actions
-
-### 자동 실행
-- **RSS 수집**: 매일 오전 9시 (KST) 자동 실행
-- **스레드 생성**: 수동 트리거 또는 RSS 수집 완료 후 실행
-
-### Secrets 설정
-Repository Settings → Secrets → Actions에 추가:
-- `GROQ_API_KEY`: Groq API 키
-
-## 문서
-
-- [USAGE.md](USAGE.md) - 상세 사용 가이드
-- [references/style-guide.md](references/style-guide.md) - 스타일 가이드
-- [.claude/agents/](/.claude/agents/) - 에이전트 정의 파일
+```text
+source_registry.py       수집 소스, 가중치, 커버리지 점수
+rss_collector.py         RSS/공식 페이지 수집
+anthropic_scraper.py     Anthropic 전용 Playwright 스크래퍼
+ai_analyzer.py           AI 분석, 중요도 보정, 품질 게이트
+archiver.py              연도/월별 아카이브 저장
+thread_generator.py      스레드 초안 생성 및 게시 전 리뷰
+references/style-guide.md 스타일 가이드
+```
 
 ## 로드맵
 
-- [x] v1.0: 10개 소스 RSS 수집 자동화
-- [x] Anthropic 블로그 스크래퍼 추가 (RSS 미제공)
-- [x] v2.0: Claude Code Agents 스레드 생성
-- [ ] v3.0: Meta Threads API 자동 포스팅
-- [ ] 성과 분석 대시보드
-- [ ] 다국어 지원 (영문 스레드)
+- [x] 17개 활성 소스 수집망 구성
+- [x] source_registry 기반 가중치/커버리지 관리
+- [x] 연도/월별 아카이브 구조
+- [x] 중요도 보정
+- [x] @jokerburg.builder 스타일 초안 생성
+- [x] 게시 전 리뷰 리포트
+- [ ] 논문 큐레이션 추가 고도화
+- [ ] 후보 랭킹 리포트
+- [ ] 수동 승인 워크플로우
+- [ ] Meta Threads 자동 게시
 
 ## 라이선스
 
 MIT License
-
----
-
-**Built with ❤️ for @jokerburg.builder**
