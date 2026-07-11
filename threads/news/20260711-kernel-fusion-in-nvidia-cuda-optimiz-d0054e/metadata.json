@@ -1,0 +1,16 @@
+{
+  "source": "archive/2026/07월/2026-07-11.md",
+  "source_url": "https://developer.nvidia.com/blog/kernel-fusion-in-nvidia-cuda-optimizing-memory-traffic-and-launch-overhead/",
+  "company": "NVIDIA",
+  "title": "커널融合을 통한 메모리 트래픽 및 런치 오버헤드 최적화",
+  "category": "오픈소스 도구",
+  "importance": 9,
+  "thread_count": 9,
+  "image_url": "https://developer-blogs.nvidia.com/wp-content/uploads/2026/06/AI-Inference.webp",
+  "created_at": "2026-07-11T01:54:28",
+  "status": "draft",
+  "generator": "thread_generator.py",
+  "review_status": "BLOCKED",
+  "review_blocking_count": 1,
+  "review_warning_count": 0
+}
