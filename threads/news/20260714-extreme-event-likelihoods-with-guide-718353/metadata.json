@@ -1,0 +1,16 @@
+{
+  "source": "archive/2026/07월/2026-07-14.md",
+  "source_url": "https://developer.nvidia.com/blog/extreme-event-likelihoods-with-guided-generative-models/",
+  "company": "NVIDIA",
+  "title": "극한 사건 확률 추정에 대한 안내된 생성 모델",
+  "category": "연구 논문",
+  "importance": 9,
+  "thread_count": 9,
+  "image_url": "https://developer-blogs.nvidia.com/wp-content/uploads/2026/07/image1.gif",
+  "created_at": "2026-07-14T01:34:08",
+  "status": "draft",
+  "generator": "thread_generator.py",
+  "review_status": "BLOCKED",
+  "review_blocking_count": 1,
+  "review_warning_count": 0
+}
