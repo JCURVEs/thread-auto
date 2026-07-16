@@ -116,6 +116,17 @@ archive/
 archive/2026/07월/2026-07-09.md
 ```
 
+## 일일 실행 로그
+
+GitHub Actions는 매일 한국 시간 오전 9시에 실행됩니다.
+
+```text
+logs/daily/2026/07월/2026-07-16.md
+```
+
+새 글이 없는 날에도 수집 소스 수, 커버리지 점수, 비활성 소스, 최신 아카이브 경로를 기록합니다.  
+Actions 커밋 작성자는 기본적으로 `JCURVEs <JCURVEs@users.noreply.github.com>`로 설정되어 GitHub contribution graph에 반영되도록 구성했습니다.
+
 ## 스레드 초안 포맷
 
 뉴스 스레드는 총 9개 파일로 생성됩니다.
@@ -275,6 +286,7 @@ rss_collector.py         RSS/공식 페이지 수집
 anthropic_scraper.py     Anthropic 전용 Playwright 스크래퍼
 ai_analyzer.py           AI 분석, 중요도 보정, 품질 게이트
 archiver.py              연도/월별 아카이브 저장
+scripts/write_daily_run_log.py 일일 실행 로그 생성
 thread_generator.py      스레드 초안 생성 및 게시 전 리뷰
 references/style-guide.md 스타일 가이드
 ```
