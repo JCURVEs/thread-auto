@@ -1,0 +1,16 @@
+{
+  "source": "archive/2026/07월/2026-07-16.md",
+  "source_url": "https://developer.nvidia.com/blog/building-faster-cryptography-with-carryless-multiplication-in-nvidia-cuda-13-3/",
+  "company": "NVIDIA",
+  "title": "NVIDIA CUDA 13.3의 캐리리스 연산 기능으로 더 빠른 암호화 구현",
+  "category": "API/인프라",
+  "importance": 9,
+  "thread_count": 9,
+  "image_url": "https://developer-blogs.nvidia.com/wp-content/uploads/2026/03/CUDA-Tile-Flash-Attention.webp",
+  "created_at": "2026-07-16T01:50:46",
+  "status": "draft",
+  "generator": "thread_generator.py",
+  "review_status": "BLOCKED",
+  "review_blocking_count": 1,
+  "review_warning_count": 0
+}
