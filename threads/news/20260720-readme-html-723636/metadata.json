@@ -1,0 +1,16 @@
+{
+  "source": "archive/2026/07월/2026-07-20.md",
+  "source_url": "https://rocm.blogs.amd.com/artificial-intelligence/vqe-qiskit-aer/README.html",
+  "company": "AMD ROCm",
+  "title": "양자 변분 아이겐솔버를 Qiskit Aer와 AMD Instinct에서 실행",
+  "category": "연구 논문",
+  "importance": 9,
+  "thread_count": 9,
+  "image_url": "https://rocm.blogs.amd.com/_images/artificial-intelligence-vqe-qiskit-aer-images-potential_well_thumbnail.webp",
+  "created_at": "2026-07-20T02:04:12",
+  "status": "draft",
+  "generator": "thread_generator.py",
+  "review_status": "READY_FOR_HUMAN_REVIEW",
+  "review_blocking_count": 0,
+  "review_warning_count": 0
+}
