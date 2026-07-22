@@ -1,0 +1,16 @@
+{
+  "source": "archive/2026/07월/2026-07-22.md",
+  "source_url": "https://developer.nvidia.com/blog/setting-a-world-record-for-moe-pre-training-on-nvidia-gb300-nvl72/",
+  "company": "NVIDIA",
+  "title": "전문가 モデル(모델) 사전 훈련에서 NVIDIA GB300 NVL72로 세계 기록 달성",
+  "category": "API/인프라",
+  "importance": 9,
+  "thread_count": 9,
+  "image_url": "https://developer-blogs.nvidia.com/wp-content/uploads/2026/07/World-Record.webp",
+  "created_at": "2026-07-22T01:51:37",
+  "status": "draft",
+  "generator": "thread_generator.py",
+  "review_status": "BLOCKED",
+  "review_blocking_count": 1,
+  "review_warning_count": 0
+}
