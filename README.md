@@ -14,7 +14,7 @@ AI/테크 뉴스와 논문 후보를 수집하고, Threads에 올릴 수 있는 
 
 ## 현재 상태
 
-- 17개 활성 소스 기반 수집망
+- 15개 활성 소스 기반 수집망
 - source_registry 기반 소스 가중치/커버리지 관리
 - 수집 커버리지 점수 100/100
 - 연도/월별 아카이브 구조
@@ -43,15 +43,13 @@ meta_research
 ```text
 nvidia_technical
 nvidia_developer_ai
-amd_rocm
+nvidia_korea_blog
 ```
 
 ### 클라우드 / 플랫폼
 
 ```text
 microsoft_research
-azure_ai
-aws_machine_learning
 google_cloud_ai
 ```
 
@@ -69,9 +67,12 @@ arxiv_cl
 ```text
 microsoft_ai
 perplexity
+amd_rocm
+azure_ai
+aws_machine_learning
 ```
 
-두 소스는 registry에 남겨두었지만, 자동 검증 기준으로 안정적인 수집이 어려워 기본 수집 대상에서는 제외했습니다.
+위 소스는 registry에 남겨두었지만, 자동 검증 기준으로 안정적인 수집이 어렵거나 현재 편집 방향에서 제외되어 기본 수집 대상에서는 제외했습니다.
 
 ## 소스 가중치
 
@@ -86,7 +87,7 @@ developer_ecosystem
 paper_research
 ```
 
-예를 들어 NVIDIA, AWS Machine Learning, Microsoft Research 같은 실무 임팩트가 큰 소스는 기본보다 높은 가중치를 가집니다.  
+예를 들어 NVIDIA, NVIDIA Korea, Microsoft Research 같은 실무 임팩트가 큰 소스는 기본보다 높은 가중치를 가집니다.
 단, 비즈니스/파트너십성 글은 중요도 보정에서 낮게 제한됩니다.
 
 ## 아카이브 구조
@@ -293,7 +294,7 @@ references/style-guide.md 스타일 가이드
 
 ## 로드맵
 
-- [x] 17개 활성 소스 수집망 구성
+- [x] 15개 활성 소스 수집망 구성
 - [x] source_registry 기반 가중치/커버리지 관리
 - [x] 연도/월별 아카이브 구조
 - [x] 중요도 보정

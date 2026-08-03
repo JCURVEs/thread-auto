@@ -247,6 +247,7 @@ def test_company_name_tags(temp_dir):
         "huggingface": "Hugging Face",
         "meta_research": "Meta AI",
         "nvidia_technical": "NVIDIA",
+        "nvidia_korea_blog": "NVIDIA Korea",
         "amd_rocm": "AMD ROCm",
         "microsoft_research": "Microsoft Research",
         "azure_ai": "Azure AI",

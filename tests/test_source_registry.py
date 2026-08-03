@@ -19,11 +19,12 @@ def test_enabled_sources_cover_priority_collection_groups():
     assert calculate_collection_score() >= 90
     assert "nvidia_technical" in enabled_sources
     assert "nvidia_developer_ai" in enabled_sources
-    assert "amd_rocm" in enabled_sources
+    assert "nvidia_korea_blog" in enabled_sources
     assert "microsoft_research" in enabled_sources
-    assert "azure_ai" in enabled_sources
-    assert "aws_machine_learning" in enabled_sources
     assert "google_cloud_ai" in enabled_sources
+    assert "amd_rocm" not in enabled_sources
+    assert "azure_ai" not in enabled_sources
+    assert "aws_machine_learning" not in enabled_sources
 
 
 def test_registry_records_unstable_requested_sources_without_enabling_them():
@@ -33,10 +34,19 @@ def test_registry_records_unstable_requested_sources_without_enabling_them():
 
     assert "microsoft_ai" in SOURCE_REGISTRY
     assert "perplexity" in SOURCE_REGISTRY
+    assert "amd_rocm" in SOURCE_REGISTRY
+    assert "azure_ai" in SOURCE_REGISTRY
+    assert "aws_machine_learning" in SOURCE_REGISTRY
     assert "microsoft_ai" in disabled_sources
     assert "perplexity" in disabled_sources
+    assert "amd_rocm" in disabled_sources
+    assert "azure_ai" in disabled_sources
+    assert "aws_machine_learning" in disabled_sources
     assert disabled_sources["microsoft_ai"]["disabled_reason"]
     assert disabled_sources["perplexity"]["disabled_reason"]
+    assert disabled_sources["amd_rocm"]["disabled_reason"]
+    assert disabled_sources["azure_ai"]["disabled_reason"]
+    assert disabled_sources["aws_machine_learning"]["disabled_reason"]
 
 
 def test_registry_does_not_add_open_source_release_feeds():
@@ -56,5 +66,5 @@ def test_priority_sources_have_higher_editorial_weight():
     """인프라/클라우드 핵심 소스는 기본보다 높은 가중치를 가져야 함."""
 
     assert get_source_weight("nvidia_technical") > 1.0
-    assert get_source_weight("aws_machine_learning") > 1.0
+    assert get_source_weight("nvidia_korea_blog") > 1.0
     assert get_source_weight("microsoft_research") > 1.0

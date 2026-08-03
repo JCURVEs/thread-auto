@@ -77,13 +77,22 @@ SOURCE_REGISTRY: Dict[str, Dict[str, Any]] = {
         "weight": 1.25,
         "enabled": True,
     },
+    "nvidia_korea_blog": {
+        "url": "https://blogs.nvidia.co.kr/feed/",
+        "name": "NVIDIA Korea Blog",
+        "group": "infra_chip",
+        "fetch_mode": "rss",
+        "weight": 1.15,
+        "enabled": True,
+    },
     "amd_rocm": {
         "url": "https://rocm.blogs.amd.com/",
         "name": "AMD ROCm Blog",
         "group": "infra_chip",
         "fetch_mode": "html_listing",
         "weight": 1.2,
-        "enabled": True,
+        "enabled": False,
+        "disabled_reason": "Removed from the active editorial collection scope.",
         "url_pattern": "/README.html",
     },
 
@@ -102,7 +111,8 @@ SOURCE_REGISTRY: Dict[str, Dict[str, Any]] = {
         "group": "cloud_platform",
         "fetch_mode": "rss",
         "weight": 1.05,
-        "enabled": True,
+        "enabled": False,
+        "disabled_reason": "Removed from the active editorial collection scope.",
         "topic_keywords": ("ai", "machine learning", "azure ai", "copilot", "agent"),
     },
     "aws_machine_learning": {
@@ -111,7 +121,8 @@ SOURCE_REGISTRY: Dict[str, Dict[str, Any]] = {
         "group": "cloud_platform",
         "fetch_mode": "rss",
         "weight": 1.1,
-        "enabled": True,
+        "enabled": False,
+        "disabled_reason": "Removed from the active editorial collection scope.",
     },
     "google_cloud_ai": {
         "url": "https://cloud.google.com/blog/products/ai-machine-learning",
