@@ -1,0 +1,16 @@
+{
+  "source": "archive/2026/08월/2026-08-05.md",
+  "source_url": "https://arxiv.org/abs/2608.00007",
+  "company": "arXiv NLP",
+  "title": "MemoryForge: 인공지능 에이전트에게 인간과 같은 영원한 기억 생성",
+  "category": "LLM 출시",
+  "importance": 8,
+  "thread_count": 9,
+  "image_url": "/static/browse/0.3.4/images/arxiv-logo-fb.png",
+  "created_at": "2026-08-05T01:49:03",
+  "status": "draft",
+  "generator": "thread_generator.py",
+  "review_status": "READY_FOR_HUMAN_REVIEW",
+  "review_blocking_count": 0,
+  "review_warning_count": 0
+}
