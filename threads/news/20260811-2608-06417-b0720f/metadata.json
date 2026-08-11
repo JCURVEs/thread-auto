@@ -1,0 +1,16 @@
+{
+  "source": "archive/2026/08월/2026-08-11.md",
+  "source_url": "https://arxiv.org/abs/2608.06417",
+  "company": "arXiv ML",
+  "title": "잠재된 사실 검증: 변환기 모델의 표현 공간에서 허위 정보 탐지",
+  "category": "연구 논문",
+  "importance": 9,
+  "thread_count": 9,
+  "image_url": "/static/browse/0.3.4/images/arxiv-logo-fb.png",
+  "created_at": "2026-08-11T01:05:20",
+  "status": "draft",
+  "generator": "thread_generator.py",
+  "review_status": "READY_FOR_HUMAN_REVIEW",
+  "review_blocking_count": 0,
+  "review_warning_count": 0
+}
