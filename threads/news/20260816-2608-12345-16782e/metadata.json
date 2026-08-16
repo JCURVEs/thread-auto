@@ -1,0 +1,16 @@
+{
+  "source": "archive/2026/08월/2026-08-16.md",
+  "source_url": "https://arxiv.org/abs/2608.12345",
+  "company": "arXiv AI",
+  "title": "합성 언어 모델의 연구 윤리 평가를 위한 기준",
+  "category": "연구 논문",
+  "importance": 8,
+  "thread_count": 9,
+  "image_url": "/static/browse/0.3.4/images/arxiv-logo-fb.png",
+  "created_at": "2026-08-16T00:43:25",
+  "status": "draft",
+  "generator": "thread_generator.py",
+  "review_status": "READY_FOR_HUMAN_REVIEW",
+  "review_blocking_count": 0,
+  "review_warning_count": 0
+}
