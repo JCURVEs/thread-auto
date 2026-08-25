@@ -10,10 +10,13 @@ Supports multiple FREE AI providers:
 - Gemini (Google, 1.5K req/day)
 """
 
+import json
 import os
 import re
+import sys
 from typing import Optional
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from time import mktime
 import feedparser
 from dateutil import parser as date_parser
@@ -34,6 +37,7 @@ from ai_analyzer import (
     calibrate_importance,
     validate_content,
     validate_quality_gate,
+    validate_factual_grounding,
     get_provider_info,
     PROVIDERS,
     DEFAULT_PROVIDER
@@ -50,6 +54,8 @@ THREADS_ACCESS_TOKEN = os.environ.get("THREADS_ACCESS_TOKEN")
 RSS_URL = os.environ.get("RSS_URL", None)  # If None, use all sources
 COLLECT_ALL_SOURCES = os.environ.get("COLLECT_ALL_SOURCES", "True").lower() in ("true", "1", "yes")
 DRY_RUN = os.environ.get("DRY_RUN", "True").lower() in ("true", "1", "yes")
+REQUIRE_DAILY_ARTICLE = os.environ.get("REQUIRE_DAILY_ARTICLE", "False").lower() in ("true", "1", "yes")
+LAST_RUN_SUMMARY_PATH = Path(__file__).resolve().parent / ".thread_auto_last_run.json"
 
 
 def get_api_key() -> Optional[str]:
@@ -189,6 +195,16 @@ def process_single_entry(entry: dict, source_name: str, client: dict, model: str
         print(f"  ❌ 품질 게이트 실패: {', '.join(quality_errors)}")
         return False
 
+    is_grounded, grounding_errors = validate_factual_grounding(
+        content,
+        original_title=info["title"],
+        original_summary=info["description"],
+        article_content=article_content if article_content_used else "",
+    )
+    if not is_grounded:
+        print(f"  ❌ 근거 검증 실패: {', '.join(grounding_errors)}")
+        return False
+
     print(f"  ✅ 분석 완료")
     print(f"     📰 {content.get('title', '제목 없음')[:50]}...")
     if "importance_original" in content:
@@ -261,7 +277,32 @@ def process_single_source(source_name: str, rss_url: str, client: dict, model: s
     return archived_count
 
 
-def run_pipeline() -> None:
+def write_pipeline_summary(
+    status: str,
+    total_articles: int = 0,
+    total_sources: int = 0,
+    source_results: Optional[list] = None,
+    error: str = "",
+) -> None:
+    """Write a local machine-readable summary for the daily log step."""
+    payload = {
+        "status": status,
+        "total_articles": total_articles,
+        "total_sources": total_sources,
+        "source_results": source_results or [],
+        "error": error,
+        "require_daily_article": REQUIRE_DAILY_ARTICLE,
+        "ai_provider": AI_PROVIDER,
+        "dry_run": DRY_RUN,
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+    }
+    LAST_RUN_SUMMARY_PATH.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+
+
+def run_pipeline() -> int:
     """
     Execute the Thread-Auto pipeline.
 
@@ -279,7 +320,11 @@ def run_pipeline() -> None:
         env_key = config.get("env_key", "API_KEY")
         print(f"❌ {env_key} 환경 변수가 설정되지 않았습니다.")
         print(f"\n{get_provider_info()}")
-        return
+        write_pipeline_summary(
+            "failed",
+            error=f"missing_api_key:{env_key}",
+        )
+        return 2
 
     provider_config = PROVIDERS.get(AI_PROVIDER)
     model = AI_MODEL or provider_config["default_model"]
@@ -291,7 +336,8 @@ def run_pipeline() -> None:
         client = create_client(api_key, AI_PROVIDER, model)
     except Exception as e:
         print(f"❌ AI 클라이언트 생성 실패: {e}")
-        return
+        write_pipeline_summary("failed", error=f"client_create_failed:{e}")
+        return 2
 
     # Determine which sources to collect
     if RSS_URL:
@@ -336,6 +382,26 @@ def run_pipeline() -> None:
         print(f"# ⚠️ 새로 수집된 기사가 없습니다.")
     print("#" * 70 + "\n")
 
+    if total_articles == 0 and REQUIRE_DAILY_ARTICLE:
+        error = "no_articles_archived"
+        print(f"❌ REQUIRE_DAILY_ARTICLE=true 이지만 새 아카이브가 없습니다: {error}")
+        write_pipeline_summary(
+            "failed",
+            total_articles=total_articles,
+            total_sources=total_count,
+            source_results=source_results,
+            error=error,
+        )
+        return 3
+
+    write_pipeline_summary(
+        "success",
+        total_articles=total_articles,
+        total_sources=total_count,
+        source_results=source_results,
+    )
+    return 0
+
 
 def show_providers() -> None:
     """Display available AI providers information."""
@@ -347,7 +413,7 @@ def main() -> None:
     Main entry point for Thread-Auto application.
     """
     # Run the main pipeline
-    run_pipeline()
+    raise SystemExit(run_pipeline())
 
 
 if __name__ == "__main__":

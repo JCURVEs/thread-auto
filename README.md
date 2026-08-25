@@ -5,6 +5,18 @@ AI/테크 뉴스와 논문 후보를 수집하고, Threads에 올릴 수 있는 
 현재 목표는 자동 게시가 아니라 다음 흐름입니다.
 
 ```text
+기존 Threads 글 백업/자산화
+→ 개인 문체/구조 분석
+→ 스타일 프로필 생성
+→ 공식 소스 수집
+→ 본문/RSS 요약 분석
+→ 스레드 초안 생성
+→ 게시 전 품질 검수
+```
+
+뉴스 수집 파이프라인은 아래 흐름으로 동작합니다.
+
+```text
 공식 소스 수집
 → 본문/RSS 요약 분석
 → 연도/월별 아카이브 저장
@@ -20,6 +32,8 @@ AI/테크 뉴스와 논문 후보를 수집하고, Threads에 올릴 수 있는 
 - 연도/월별 아카이브 구조
 - 중요도 보정 및 품질 게이트
 - @jokerburg.builder 스타일의 스레드 초안 생성
+- Threads 과거 글 로컬 백업/정규화 기반
+- 과거 글 기반 스타일 프로필 생성 기반
 - 게시 전 리뷰 리포트 생성
 - Meta Threads 자동 게시 기능은 아직 적용하지 않음
 
@@ -201,6 +215,78 @@ thread-09.md  7/
 }
 ```
 
+## Threads 글 자산화
+
+자동 게시보다 먼저, 기존에 올린 글을 로컬 스타일 자산으로 만듭니다.
+
+```text
+Meta Threads API
+→ raw export
+→ normalized posts corpus
+→ style_profile.json
+→ thread_generator 스타일 반영
+```
+
+개인 계정 글과 토큰은 민감한 데이터이므로 `data/threads/raw/`, `data/threads/normalized/`, `data/threads/style_profile.json`은 git에 올리지 않습니다.
+
+### 1. 기존 Threads 글 백업
+
+`THREADS_ACCESS_TOKEN`은 로컬 환경 변수로만 설정합니다.
+
+```bash
+set THREADS_ACCESS_TOKEN=your_threads_access_token
+python scripts/export_threads_history.py --since 2026-01-01
+```
+
+저장 위치:
+
+```text
+data/threads/raw/runs/threads_export_YYYYMMDDTHHMMSSZ.jsonl
+data/threads/normalized/posts.jsonl
+```
+
+### 2. 스타일 프로필 생성
+
+```bash
+python scripts/analyze_threads_style.py --username jokerburg.builder
+```
+
+출력:
+
+```text
+data/threads/style_profile.json
+```
+
+분석 항목:
+
+- 글 길이와 줄 수
+- `1/`, `2/` 같은 넘버링 구조 사용률
+- 후킹 문구 사용률
+- 자주 쓰는 전개 표현
+- 문장 종결 패턴
+- 생성기가 따라야 할 스타일 힌트
+
+수집 대상:
+
+- 텍스트 본문
+- 게시 시간과 permalink
+- 이미지/영상 URL
+- 영상 썸네일 URL
+- GIF URL
+- 캐러셀 children
+- alt text
+- quote/repost/link/poll 메타데이터
+- `1/`, `2/`, `3/`처럼 자기 답글로 이어지는 conversation chain
+
+기본 export는 `has_replies`가 있는 글의 conversation을 함께 가져와 멀티스레드 흐름을 보존합니다.
+필요하면 `--no-include-conversations`로 끌 수 있습니다.
+
+이미지/영상 파일까지 내려받으려면 `--download-media`를 추가합니다. 영상이 많으면 저장 용량이 커질 수 있어 기본값은 URL/메타데이터 백업입니다.
+
+```bash
+python scripts/export_threads_history.py --since 2026-01-01 --download-media
+```
+
 ## 설치
 
 ```bash
@@ -240,9 +326,9 @@ python main.py
 실행 시 현재 수집망 정보가 출력됩니다.
 
 ```text
-Sources: 17
+Sources: 15
 Collection Score: 100/100
-Disabled Sources: microsoft_ai, perplexity
+Disabled Sources: microsoft_ai, perplexity, amd_rocm, azure_ai, aws_machine_learning
 ```
 
 ### 최신 아카이브에서 스레드 초안 생성
@@ -287,7 +373,12 @@ rss_collector.py         RSS/공식 페이지 수집
 anthropic_scraper.py     Anthropic 전용 Playwright 스크래퍼
 ai_analyzer.py           AI 분석, 중요도 보정, 품질 게이트
 archiver.py              연도/월별 아카이브 저장
+threads_history_client.py Threads API 과거 글 수집 클라이언트
+threads_assets.py        과거 글 raw/normalized 로컬 저장
+style_analyzer.py        과거 글 기반 문체/구조 분석
 scripts/write_daily_run_log.py 일일 실행 로그 생성
+scripts/export_threads_history.py Threads 과거 글 백업
+scripts/analyze_threads_style.py 스타일 프로필 생성
 thread_generator.py      스레드 초안 생성 및 게시 전 리뷰
 references/style-guide.md 스타일 가이드
 ```
@@ -299,7 +390,10 @@ references/style-guide.md 스타일 가이드
 - [x] 연도/월별 아카이브 구조
 - [x] 중요도 보정
 - [x] @jokerburg.builder 스타일 초안 생성
+- [x] Threads 과거 글 자산화 기반
+- [x] 과거 글 기반 스타일 분석기
 - [x] 게시 전 리뷰 리포트
+- [ ] style_profile 기반 thread_generator 반영
 - [ ] 논문 큐레이션 추가 고도화
 - [ ] 후보 랭킹 리포트
 - [ ] 수동 승인 워크플로우

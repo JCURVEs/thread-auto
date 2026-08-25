@@ -60,6 +60,11 @@ class TestForeignTextDetection:
         text = "研究 한국"
         assert detect_foreign_text(text, threshold=0.1)
 
+    def test_strict_mode_detects_single_foreign_character(self):
+        """Strict validation should catch even sparse mixed-script leakage."""
+        text = "한국어 텍스트입니다 텍스트입니다 텍스트입니다 研"
+        assert detect_foreign_text(text, threshold=0.1, strict=True)
+
     def test_empty_string_passes(self):
         """Empty string should pass"""
         assert not detect_foreign_text("")
@@ -144,6 +149,17 @@ class TestContentValidation:
         is_valid, error = validate_korean_content(content)
         assert not is_valid
         assert "title" in error
+
+    def test_sparse_foreign_character_in_long_summary_fails(self):
+        """A single CJK character in a long Korean summary should fail validation."""
+        content = {
+            "title": "한국어 제목",
+            "summary": "이 기술은 개발자가 모델을 더 안정적으로 운영하도록 돕는 品질 검증 절차입니다.",
+            "easy_explainer": "쉽게 말하면 배포 전 점검표입니다."
+        }
+        is_valid, error = validate_korean_content(content)
+        assert not is_valid
+        assert "summary" in error
 
 
 if __name__ == "__main__":

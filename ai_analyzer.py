@@ -9,7 +9,7 @@ import json
 import os
 import re
 import unicodedata
-from typing import Dict, Any, Optional, Tuple, List
+from typing import Dict, Any, Optional, Tuple, List, Set
 
 # System prompt defining the 'AI Tech Newsletter Curator' persona
 SYSTEM_PROMPT = """
@@ -70,6 +70,9 @@ SYSTEM_PROMPT = """
 3. **쉬운설명**: "즉, ~라는 뜻입니다" 또는 비유로 풀이.
 4. **중요도**: AI 개발자에게 "정말 알아야 하는가?"로 판단. 비즈니스 뉴스는 무조건 3점 이하.
 5. **언어**: 무조건 **한국어**로 작성.
+6. **근거 준수**: 원문에 없는 모델명, 제품명, 성능 수치, 기관명은 절대 만들지 말 것.
+7. **문장 품질**: 중국어/일본어/러시아어/베트남어 등 다른 언어 문자를 섞지 말 것.
+8. **번역 품질**: 직역투, 깨진 번역, 붙어 있는 단어를 피하고 자연스러운 한국어 문장으로 쓸 것.
 """
 
 # =============================================================================
@@ -160,10 +163,15 @@ def generate_thread_content(
     RSS 요약: {description}
     {article_section}
 
-    **중요**: 원문에 외국어(영어, 중국어, 일본어 등)가 포함되어 있다면 **반드시 한국어로 번역**해서 사용하세요.
-    기술 용어는 한글로 표기하고 필요시 원문을 괄호에 병기하세요. 예: "합성곱 신경망(Convolutional Neural Network)"
+    **중요**: 원문에 외국어(영어, 중국어, 일본어 등)가 포함되어 있다면 의미를 이해한 뒤 자연스러운 한국어로 다시 쓰세요.
+    기술 용어는 통용되는 표현을 우선 사용하고, 필요한 경우에만 원문을 괄호에 병기하세요. 예: "트랜스포머(Transformer)"
     기사 본문이 제공된 경우에는 RSS 요약보다 기사 본문을 우선 근거로 삼으세요.
     본문에 없는 성능 수치, 모델명, 발표 내용은 추측하지 마세요.
+    원문에 없는 예시 제품명이나 벤치마크명을 보태지 마세요.
+    번역이 애매한 고유명사는 원문 표기를 유지하세요.
+    중국어/일본어 한자, 히라가나, 가타카나, 키릴 문자, 베트남어 단어를 섞어 쓰지 마세요.
+    "数学", "品質", "最近", "検証", "提出", "khuyến", "Depends" 같은 깨진 혼합 문자는 절대 쓰지 마세요.
+    한국어와 영어 단어가 붙어 있으면 띄어 쓰세요. 예: "최신Foundation" 금지, "최신 Foundation" 허용.
 
     위 뉴스를 'Tech Newsletter Curator'의 관점에서 분석하여 **순수 한국어로만** JSON을 작성해줘.
     """
@@ -207,9 +215,8 @@ def generate_thread_content(
                     print(f"⚠️ 외국어 감지 ({error_msg}) - 재시도 {attempt + 1}/{max_retries}")
                     if attempt < max_retries - 1:
                         continue  # Retry
-                    else:
-                        print(f"❌ 최대 재시도 초과 - 외국어 포함된 응답 사용")
-                        # Fall through to return content anyway
+                    print("❌ 최대 재시도 초과 - 오염된 응답 폐기")
+                    return None
 
             return content
 
@@ -275,6 +282,29 @@ OVERCLAIM_EXPRESSIONS = (
     "반드시 성공",
     "업계 판도를 바꿉니다",
 )
+
+BROKEN_TRANSLATION_EXPRESSIONS = (
+    "라고하는",
+    "기반으로하는",
+    "측정하는데",
+    "그리고나서",
+    "할 수 있도록 해줍니다",
+    "중요한 간격",
+    "정확도를 향상 시킵니다",
+)
+
+GENERIC_GROUNDING_TERMS = {
+    "ai",
+    "api",
+    "cpu",
+    "gpu",
+    "llm",
+    "ml",
+    "rag",
+    "sdk",
+    "sota",
+    "transformer",
+}
 
 
 def _coerce_importance(value: Any) -> int:
@@ -439,10 +469,59 @@ def validate_quality_gate(content: Dict[str, Any]) -> Tuple[bool, List[str]]:
         if expression in text:
             errors.append(f"overclaim:{expression}")
 
+    for expression in BROKEN_TRANSLATION_EXPRESSIONS:
+        if expression in text:
+            errors.append(f"broken_translation:{expression}")
+
+    attached_word = re.search(r"[가-힣][A-Za-z]{3,}|[A-Za-z]{3,}[가-힣]{2,}", text)
+    if attached_word:
+        errors.append(f"missing_space_near_english:{attached_word.group(0)}")
+
     return len(errors) == 0, errors
 
 
-def detect_foreign_text(text: str, threshold: float = 0.1) -> bool:
+def _foreign_char_samples(text: str, strict: bool = False, limit: int = 5) -> List[str]:
+    """Return suspicious non-Korean character samples from generated Korean text."""
+    samples = []
+    seen = set()
+
+    for char in text:
+        if char.isspace() or not char.isalnum():
+            continue
+
+        try:
+            name = unicodedata.name(char, "")
+        except ValueError:
+            continue
+
+        script = name.split()[0] if name else ""
+        is_disallowed_script = script in {
+            "CJK",
+            "HIRAGANA",
+            "KATAKANA",
+            "CYRILLIC",
+            "ARABIC",
+            "THAI",
+        }
+        is_non_ascii_latin = (
+            strict
+            and script == "LATIN"
+            and ord(char) > 127
+        )
+
+        if not (is_disallowed_script or is_non_ascii_latin):
+            continue
+
+        if char not in seen:
+            samples.append(char)
+            seen.add(char)
+        if len(samples) >= limit:
+            break
+
+    return samples
+
+
+def detect_foreign_text(text: str, threshold: float = 0.1, strict: bool = False) -> bool:
     """
     Detect if text contains significant foreign characters.
 
@@ -458,6 +537,9 @@ def detect_foreign_text(text: str, threshold: float = 0.1) -> bool:
 
     total_chars = 0
     foreign_chars = 0
+
+    if strict and _foreign_char_samples(text, strict=True):
+        return True
 
     for char in text:
         # Skip whitespace and punctuation
@@ -499,10 +581,74 @@ def validate_korean_content(content: Dict[str, Any]) -> Tuple[bool, str]:
             continue
 
         text = content[field]
-        if detect_foreign_text(text):
-            return False, f"{field} contains foreign characters"
+        if detect_foreign_text(text, strict=True):
+            samples = "".join(_foreign_char_samples(text, strict=True))
+            suffix = f": {samples}" if samples else ""
+            return False, f"{field} contains foreign characters{suffix}"
 
     return True, ""
+
+
+def _extract_claim_metrics(text: str) -> Set[str]:
+    """Extract concrete numbers that should be grounded in source text."""
+    patterns = (
+        r"\b\d+(\.\d+)?\s?%",
+        r"\b\d+(\.\d+)?\s?(x|배)\b",
+        r"\b\d+(\.\d+)?\s?(ms|tokens/s|tok/s|gb|tb|fps|auroc|f1)\b",
+        r"\b\d+(\.\d+)?\s?(billion|million|trillion)\b",
+        r"\b\d+(\.\d+)?\s?(억|만|조)\b",
+    )
+    found = set()
+    lowered = text.lower()
+    for pattern in patterns:
+        for match in re.finditer(pattern, lowered):
+            found.add(re.sub(r"\s+", "", match.group(0)))
+    return found
+
+
+def _extract_versioned_terms(text: str) -> Set[str]:
+    """Extract high-risk product/model/version tokens that should appear in evidence."""
+    terms = set()
+    lowered = text.lower()
+    for match in re.finditer(r"\b[a-z][a-z0-9_.-]*\d[a-z0-9_.-]*\b", lowered):
+        term = match.group(0).strip(".,;:()[]{}")
+        if term and term not in GENERIC_GROUNDING_TERMS:
+            terms.add(term)
+    return terms
+
+
+def validate_factual_grounding(
+    content: Dict[str, Any],
+    original_title: str = "",
+    original_summary: str = "",
+    article_content: str = "",
+) -> Tuple[bool, List[str]]:
+    """
+    Block generated claims that introduce unsupported concrete facts.
+
+    This is intentionally conservative: it only checks high-risk concrete
+    details such as metrics and versioned model/product names, where adding a
+    made-up value would make the archive misleading.
+    """
+    evidence = " ".join([original_title, original_summary, article_content]).lower()
+    evidence_compact = re.sub(r"\s+", "", evidence)
+    generated = " ".join(
+        str(content.get(field, ""))
+        for field in ("title", "summary", "easy_explainer")
+    )
+
+    errors = []
+
+    for metric in sorted(_extract_claim_metrics(generated)):
+        if metric not in evidence_compact:
+            errors.append(f"ungrounded_metric:{metric}")
+
+    evidence_terms = _extract_versioned_terms(evidence)
+    for term in sorted(_extract_versioned_terms(generated)):
+        if term not in evidence_terms and term not in evidence:
+            errors.append(f"ungrounded_versioned_term:{term}")
+
+    return len(errors) == 0, errors
 
 
 def validate_content(content: Dict[str, Any]) -> bool:

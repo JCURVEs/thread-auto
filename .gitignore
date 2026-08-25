@@ -31,3 +31,9 @@ Thumbs.db
 # Local configuration
 .env
 *.local
+
+# Private Threads account assets
+data/threads/raw/
+data/threads/normalized/
+data/threads/media/
+data/threads/style_profile.json

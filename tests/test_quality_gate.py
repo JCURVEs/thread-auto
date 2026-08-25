@@ -2,7 +2,7 @@
 Quality gate tests for AI analysis output.
 """
 
-from ai_analyzer import validate_quality_gate
+from ai_analyzer import validate_factual_grounding, validate_quality_gate
 
 
 def make_content(**overrides):
@@ -70,3 +70,44 @@ def test_quality_gate_normalizes_string_importance():
     assert is_valid
     assert errors == []
     assert content["importance"] == 7
+
+
+def test_quality_gate_blocks_broken_translation_expression():
+    """깨진 번역투와 붙어 있는 표현은 저장 전에 차단해야 함."""
+
+    content = make_content(summary="이 도구는 모델 평가라고하는 과정을 자동화합니다.")
+
+    is_valid, errors = validate_quality_gate(content)
+
+    assert not is_valid
+    assert "broken_translation:라고하는" in errors
+
+
+def test_factual_grounding_blocks_unsupported_metric():
+    """원문에 없는 성능 수치는 생성문에 보태면 안 됨."""
+
+    content = make_content(summary="이 도구는 처리 속도를 90% 개선했습니다.")
+
+    is_valid, errors = validate_factual_grounding(
+        content,
+        original_title="New deployment tool",
+        original_summary="A tool for easier model deployment.",
+    )
+
+    assert not is_valid
+    assert "ungrounded_metric:90%" in errors
+
+
+def test_factual_grounding_allows_supported_metric():
+    """원문에 있는 성능 수치는 통과해야 함."""
+
+    content = make_content(summary="이 도구는 처리 속도를 90% 개선했습니다.")
+
+    is_valid, errors = validate_factual_grounding(
+        content,
+        original_title="New deployment tool",
+        original_summary="The tool improves throughput by 90%.",
+    )
+
+    assert is_valid
+    assert errors == []

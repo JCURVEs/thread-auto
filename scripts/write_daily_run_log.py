@@ -7,6 +7,7 @@ project artifact even when there are no new articles to archive.
 
 import os
 import sys
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -22,6 +23,7 @@ from source_registry import (
 
 
 LOG_DIR = ROOT_DIR / "logs" / "daily"
+LAST_RUN_SUMMARY_PATH = ROOT_DIR / ".thread_auto_last_run.json"
 KST = timezone(timedelta(hours=9), name="KST")
 
 
@@ -42,6 +44,17 @@ def latest_archive_path() -> str:
     return relative_path(archive_files[0])
 
 
+def read_last_run_summary() -> dict:
+    """Read the latest pipeline summary written by main.py."""
+    if not LAST_RUN_SUMMARY_PATH.exists():
+        return {}
+
+    try:
+        return json.loads(LAST_RUN_SUMMARY_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
 def write_daily_run_log(now: datetime | None = None) -> Path:
     """Create or update today's daily run log."""
     now = now or datetime.now(KST)
@@ -57,6 +70,7 @@ def write_daily_run_log(now: datetime | None = None) -> Path:
     disabled_sources = get_disabled_sources()
     provider = os.environ.get("AI_PROVIDER", "groq")
     dry_run = os.environ.get("DRY_RUN", "true")
+    summary = read_last_run_summary()
 
     disabled_text = (
         ", ".join(sorted(disabled_sources.keys())) if disabled_sources else "none"
@@ -70,6 +84,9 @@ def write_daily_run_log(now: datetime | None = None) -> Path:
                 f"- Run time (KST): {now.strftime('%Y-%m-%d %H:%M:%S')}",
                 f"- AI provider: {provider}",
                 f"- Dry run: {dry_run}",
+                f"- Pipeline status: {summary.get('status', 'unknown')}",
+                f"- Archived articles: {summary.get('total_articles', 'unknown')}",
+                f"- Pipeline error: {summary.get('error', 'none') or 'none'}",
                 f"- Enabled sources: {len(enabled_sources)}",
                 f"- Collection score: {calculate_collection_score()}/100",
                 f"- Disabled sources: {disabled_text}",
