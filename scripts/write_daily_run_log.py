@@ -55,6 +55,14 @@ def read_last_run_summary() -> dict:
         return {}
 
 
+def format_pipeline_stats(stats: dict) -> str:
+    """Format compact pipeline counters for markdown logs."""
+    if not stats:
+        return "none"
+
+    return ", ".join(f"{key}={value}" for key, value in sorted(stats.items()))
+
+
 def write_daily_run_log(now: datetime | None = None) -> Path:
     """Create or update today's daily run log."""
     now = now or datetime.now(KST)
@@ -87,6 +95,8 @@ def write_daily_run_log(now: datetime | None = None) -> Path:
                 f"- Pipeline status: {summary.get('status', 'unknown')}",
                 f"- Archived articles: {summary.get('total_articles', 'unknown')}",
                 f"- Pipeline error: {summary.get('error', 'none') or 'none'}",
+                f"- Fallback archive: {summary.get('fallback_archive_enabled', 'unknown')}",
+                f"- Pipeline stats: {format_pipeline_stats(summary.get('stats', {}))}",
                 f"- Enabled sources: {len(enabled_sources)}",
                 f"- Collection score: {calculate_collection_score()}/100",
                 f"- Disabled sources: {disabled_text}",

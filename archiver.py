@@ -197,6 +197,12 @@ def save_to_archive(
     importance = data.get('importance', 5)
     lines.append(f"**분야:** {category} | **중요도:** {importance}점\n\n")
 
+    if data.get("analysis_status"):
+        lines.append(f"**분석상태:** {data['analysis_status']}\n\n")
+
+    if data.get("analysis_error"):
+        lines.append(f"**분석오류:** {data['analysis_error']}\n\n")
+
     if "importance_original" in data:
         reason = data.get("importance_adjusted_reason", "rule_based_calibration")
         lines.append(

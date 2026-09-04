@@ -16,6 +16,11 @@ def test_daily_run_log_includes_pipeline_summary(monkeypatch, tmp_path):
                 "status": "failed",
                 "total_articles": 0,
                 "error": "no_articles_archived",
+                "fallback_archive_enabled": True,
+                "stats": {
+                    "archived_fallback": 2,
+                    "quality_gate_failed": 2,
+                },
             },
             ensure_ascii=False,
         ),
@@ -36,3 +41,5 @@ def test_daily_run_log_includes_pipeline_summary(monkeypatch, tmp_path):
     assert "- Pipeline status: failed" in output
     assert "- Archived articles: 0" in output
     assert "- Pipeline error: no_articles_archived" in output
+    assert "- Fallback archive: True" in output
+    assert "- Pipeline stats: archived_fallback=2, quality_gate_failed=2" in output
