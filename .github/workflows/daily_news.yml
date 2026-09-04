@@ -7,9 +7,9 @@ on:
   workflow_dispatch: # 수동 실행 버튼 (테스트용)
     inputs:
       ai_provider:
-        description: 'AI Provider (groq, openrouter, gemini)'
+        description: 'AI Provider (openrouter, groq, gemini)'
         required: false
-        default: 'groq'
+        default: 'openrouter'
       dry_run:
         description: 'Dry Run Mode (true/false)'
         required: false
@@ -39,9 +39,13 @@ jobs:
 
     - name: 🚀 Thread-Auto 파이프라인 실행
       env:
-        # AI Provider 설정 (기본: Groq - 무료, 빠름)
-        AI_PROVIDER: ${{ github.event.inputs.ai_provider || 'groq' }}
+        # AI Provider 설정 (기본: OpenRouter + Qwen3.8)
+        AI_PROVIDER: ${{ github.event.inputs.ai_provider || 'openrouter' }}
+        AI_PROVIDER_FALLBACKS: ${{ vars.AI_PROVIDER_FALLBACKS || 'openrouter,groq,gemini' }}
         AI_MODEL: ${{ vars.AI_MODEL || '' }}
+        OPENROUTER_MODEL: ${{ vars.OPENROUTER_MODEL || 'qwen/qwen3.8-flash' }}
+        GROQ_MODEL: ${{ vars.GROQ_MODEL || '' }}
+        GEMINI_MODEL: ${{ vars.GEMINI_MODEL || '' }}
         
         # API Keys (GitHub Secrets에 등록)
         GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
@@ -62,7 +66,7 @@ jobs:
     - name: 🗓️ 일일 실행 로그 생성
       if: always()
       env:
-        AI_PROVIDER: ${{ github.event.inputs.ai_provider || 'groq' }}
+        AI_PROVIDER: ${{ github.event.inputs.ai_provider || 'openrouter' }}
         DRY_RUN: ${{ github.event.inputs.dry_run || vars.DRY_RUN || 'true' }}
       run: python scripts/write_daily_run_log.py
 
@@ -95,5 +99,5 @@ jobs:
         echo "## Thread-Auto 실행 완료" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "- 실행 시간: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
-        echo "- AI Provider: ${{ github.event.inputs.ai_provider || 'groq' }}" >> $GITHUB_STEP_SUMMARY
+        echo "- AI Provider: ${{ github.event.inputs.ai_provider || 'openrouter' }}" >> $GITHUB_STEP_SUMMARY
         echo "- DRY_RUN 모드: ${{ github.event.inputs.dry_run || vars.DRY_RUN || 'true' }}" >> $GITHUB_STEP_SUMMARY

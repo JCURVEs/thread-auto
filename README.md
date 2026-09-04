@@ -299,20 +299,26 @@ pip install -r requirements.txt
 
 ## 환경 변수
 
-기본 AI 분석 provider는 Groq입니다.
+기본 AI 분석 provider는 OpenRouter이며, 기본 모델은 Qwen3.8 Flash입니다.
+OpenRouter 키가 없거나 클라이언트 생성이 실패하면 `AI_PROVIDER_FALLBACKS` 순서에 따라 Groq, Gemini로 자동 전환됩니다.
 
 ```bash
-set GROQ_API_KEY=your_key
+set OPENROUTER_API_KEY=your_key
+set OPENROUTER_MODEL=qwen/qwen3.8-flash
 set COLLECT_ALL_SOURCES=true
 ```
 
 선택 옵션:
 
 ```bash
-set AI_PROVIDER=groq
+set AI_PROVIDER=openrouter
+set AI_PROVIDER_FALLBACKS=openrouter,groq,gemini
 set AI_MODEL=
+set GROQ_API_KEY=
+set GEMINI_API_KEY=
 set MAX_ARTICLE_AGE_HOURS=48
 set ENTRIES_PER_SOURCE=5
+set ENABLE_FALLBACK_ARCHIVE=true
 ```
 
 ## 실행

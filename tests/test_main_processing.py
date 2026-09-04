@@ -244,6 +244,70 @@ def test_process_single_entry_archives_fallback_without_ai_client(monkeypatch):
     assert captured["source_name"] == "nvidia_korea_blog"
 
 
+def test_select_ai_client_prefers_openrouter_qwen38(monkeypatch):
+    """기본 provider는 OpenRouter의 Qwen3.8 Flash여야 함."""
+
+    main.PROCESS_STATS.clear()
+    monkeypatch.setattr(main, "AI_PROVIDER", "openrouter")
+    monkeypatch.setattr(main, "AI_PROVIDER_FALLBACKS", "openrouter,groq,gemini")
+    monkeypatch.setattr(main, "AI_MODEL", None)
+    monkeypatch.delenv("OPENROUTER_MODEL", raising=False)
+    monkeypatch.setattr(
+        main,
+        "get_api_key",
+        lambda provider=None: "openrouter-key" if provider == "openrouter" else None,
+    )
+    monkeypatch.setattr(
+        main,
+        "create_client",
+        lambda api_key, provider, model: {
+            "api_key": api_key,
+            "provider": provider,
+            "model": model,
+        },
+    )
+
+    provider, model, client, skipped = main.select_ai_client()
+
+    assert provider == "openrouter"
+    assert model == "qwen/qwen3.8-flash"
+    assert client["provider"] == "openrouter"
+    assert client["api_key"] == "openrouter-key"
+    assert skipped == []
+
+
+def test_select_ai_client_falls_back_to_groq_when_openrouter_key_missing(monkeypatch):
+    """OpenRouter 키가 없으면 같은 실행에서 Groq로 자동 전환해야 함."""
+
+    main.PROCESS_STATS.clear()
+    monkeypatch.setattr(main, "AI_PROVIDER", "openrouter")
+    monkeypatch.setattr(main, "AI_PROVIDER_FALLBACKS", "openrouter,groq,gemini")
+    monkeypatch.setattr(main, "AI_MODEL", None)
+    monkeypatch.delenv("GROQ_MODEL", raising=False)
+    monkeypatch.setattr(
+        main,
+        "get_api_key",
+        lambda provider=None: "groq-key" if provider == "groq" else None,
+    )
+    monkeypatch.setattr(
+        main,
+        "create_client",
+        lambda api_key, provider, model: {
+            "api_key": api_key,
+            "provider": provider,
+            "model": model,
+        },
+    )
+
+    provider, model, client, skipped = main.select_ai_client()
+
+    assert provider == "groq"
+    assert model == "llama-3.3-70b-versatile"
+    assert client["provider"] == "groq"
+    assert any(item.startswith("openrouter:missing_api_key") for item in skipped)
+    assert main.PROCESS_STATS["provider_missing_key_openrouter"] == 1
+
+
 def test_process_single_entry_blocks_ungrounded_claims(monkeypatch):
     """원문에 없는 구체 수치를 만든 콘텐츠는 저장하지 않아야 함."""
 
@@ -274,14 +338,18 @@ def test_run_pipeline_fails_when_api_key_missing(monkeypatch, tmp_path):
 
     summary_path = tmp_path / "last_run.json"
     monkeypatch.setattr(main, "LAST_RUN_SUMMARY_PATH", summary_path)
-    monkeypatch.setattr(main, "get_api_key", lambda: None)
+    monkeypatch.setattr(main, "get_api_key", lambda provider=None: None)
 
     exit_code = main.run_pipeline()
 
     assert exit_code == 2
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
     assert summary["status"] == "failed"
-    assert summary["error"].startswith("missing_api_key")
+    assert summary["error"] == "no_available_ai_provider"
+    assert any(
+        item.startswith("openrouter:missing_api_key")
+        for item in summary["provider_selection"]
+    )
 
 
 def test_run_pipeline_can_archive_fallback_when_api_key_missing(monkeypatch, tmp_path):
@@ -293,7 +361,7 @@ def test_run_pipeline_can_archive_fallback_when_api_key_missing(monkeypatch, tmp
     monkeypatch.setattr(main, "LAST_RUN_SUMMARY_PATH", summary_path)
     monkeypatch.setattr(main, "ENABLE_FALLBACK_ARCHIVE", True)
     monkeypatch.setattr(main, "REQUIRE_DAILY_ARTICLE", True)
-    monkeypatch.setattr(main, "get_api_key", lambda: None)
+    monkeypatch.setattr(main, "get_api_key", lambda provider=None: None)
     monkeypatch.setattr(main, "DEFAULT_RSS_SOURCES", {"openai": "https://example.com/rss"})
 
     def fake_process_single_source(source_name, rss_url, client, model):
@@ -312,7 +380,8 @@ def test_run_pipeline_can_archive_fallback_when_api_key_missing(monkeypatch, tmp
     assert summary["status"] == "success"
     assert summary["total_articles"] == 1
     assert summary["fallback_archive_enabled"] is True
-    assert summary["stats"]["missing_api_key_fallback"] == 1
+    assert summary["ai_provider"] == "openrouter"
+    assert summary["stats"]["no_ai_provider_fallback"] == 1
 
 
 def test_run_pipeline_can_fail_when_no_articles_required(monkeypatch, tmp_path):
@@ -321,7 +390,7 @@ def test_run_pipeline_can_fail_when_no_articles_required(monkeypatch, tmp_path):
     summary_path = tmp_path / "last_run.json"
     monkeypatch.setattr(main, "LAST_RUN_SUMMARY_PATH", summary_path)
     monkeypatch.setattr(main, "REQUIRE_DAILY_ARTICLE", True)
-    monkeypatch.setattr(main, "get_api_key", lambda: "key")
+    monkeypatch.setattr(main, "get_api_key", lambda provider=None: "key")
     monkeypatch.setattr(main, "create_client", lambda api_key, provider, model: {})
     monkeypatch.setattr(main, "DEFAULT_RSS_SOURCES", {"openai": "https://example.com/rss"})
     monkeypatch.setattr(main, "process_single_source", lambda source_name, rss_url, client, model: 0)

@@ -55,6 +55,7 @@ from source_registry import calculate_collection_score, get_disabled_sources
 # --- Configuration ---
 AI_PROVIDER = os.environ.get("AI_PROVIDER", DEFAULT_PROVIDER)
 AI_MODEL = os.environ.get("AI_MODEL", None)  # None = 제공자 기본 모델 사용
+AI_PROVIDER_FALLBACKS = os.environ.get("AI_PROVIDER_FALLBACKS", "openrouter,groq,gemini")
 THREADS_ACCESS_TOKEN = os.environ.get("THREADS_ACCESS_TOKEN")
 RSS_URL = os.environ.get("RSS_URL", None)  # If None, use all sources
 COLLECT_ALL_SOURCES = os.environ.get("COLLECT_ALL_SOURCES", "True").lower() in ("true", "1", "yes")
@@ -63,14 +64,83 @@ REQUIRE_DAILY_ARTICLE = os.environ.get("REQUIRE_DAILY_ARTICLE", "False").lower()
 ENABLE_FALLBACK_ARCHIVE = os.environ.get("ENABLE_FALLBACK_ARCHIVE", "False").lower() in ("true", "1", "yes")
 LAST_RUN_SUMMARY_PATH = Path(__file__).resolve().parent / ".thread_auto_last_run.json"
 PROCESS_STATS = Counter()
+ACTIVE_AI_PROVIDER = AI_PROVIDER
+PROVIDER_SELECTION_LOG = []
 
 
-def get_api_key() -> Optional[str]:
+def get_api_key(provider: Optional[str] = None) -> Optional[str]:
     """Get API key for the configured provider."""
-    config = PROVIDERS.get(AI_PROVIDER)
+    config = PROVIDERS.get(provider or AI_PROVIDER)
     if not config:
         return None
     return os.environ.get(config["env_key"])
+
+
+def get_provider_chain(preferred_provider: str, fallback_spec: str) -> list[str]:
+    """Return the provider order to try, preserving preference and removing duplicates."""
+    names = [preferred_provider]
+    names.extend(
+        item.strip()
+        for item in fallback_spec.split(",")
+        if item.strip()
+    )
+
+    chain = []
+    seen = set()
+    for name in names:
+        normalized = name.lower()
+        if normalized in seen:
+            continue
+        chain.append(normalized)
+        seen.add(normalized)
+    return chain
+
+
+def get_model_for_provider(provider: str, preferred_model: Optional[str] = None) -> str:
+    """Resolve a model override without leaking an incompatible model to fallback providers."""
+    config = PROVIDERS[provider]
+    provider_model_env = config.get("model_env_key", f"{provider.upper()}_MODEL")
+    provider_model = os.environ.get(provider_model_env, "").strip()
+    if provider_model:
+        return provider_model
+
+    if provider == AI_PROVIDER and preferred_model:
+        return preferred_model
+
+    return config["default_model"]
+
+
+def select_ai_client() -> tuple[str, str, Optional[dict], list[str]]:
+    """Pick the first configured AI provider and fall back deterministically."""
+    skipped = []
+
+    for provider in get_provider_chain(AI_PROVIDER, AI_PROVIDER_FALLBACKS):
+        config = PROVIDERS.get(provider)
+        if not config:
+            skipped.append(f"{provider}:unknown_provider")
+            record_pipeline_stat(f"provider_unknown_{provider}")
+            continue
+
+        model = get_model_for_provider(provider, AI_MODEL)
+        api_key = get_api_key(provider)
+        if not api_key:
+            skipped.append(f"{provider}:missing_api_key:{config['env_key']}")
+            record_pipeline_stat(f"provider_missing_key_{provider}")
+            continue
+
+        try:
+            client = create_client(api_key, provider, model)
+            return provider, model, client, skipped
+        except Exception as e:
+            skipped.append(f"{provider}:client_create_failed:{compact_error(e)}")
+            record_pipeline_stat(f"provider_client_failed_{provider}")
+
+    fallback_provider = get_provider_chain(AI_PROVIDER, AI_PROVIDER_FALLBACKS)[0]
+    if fallback_provider not in PROVIDERS:
+        fallback_provider = DEFAULT_PROVIDER
+
+    fallback_model = get_model_for_provider(fallback_provider, AI_MODEL)
+    return fallback_provider, fallback_model, None, skipped
 
 
 def parse_published_date_utc(entry: dict, link: str) -> Optional[datetime]:
@@ -242,7 +312,7 @@ def save_fallback_archive(
             image_url,
             info["link"],
             info["title"],
-            AI_PROVIDER,
+            ACTIVE_AI_PROVIDER,
             model,
             source_name,
             original_summary=original_summary,
@@ -430,7 +500,7 @@ def process_single_entry(entry: dict, source_name: str, client: Optional[dict], 
             image_url,
             info["link"],
             info["title"],
-            AI_PROVIDER,
+            ACTIVE_AI_PROVIDER,
             model,
             source_name,  # Pass company name
             original_summary=info["description"],
@@ -507,7 +577,9 @@ def write_pipeline_summary(
         "require_daily_article": REQUIRE_DAILY_ARTICLE,
         "fallback_archive_enabled": ENABLE_FALLBACK_ARCHIVE,
         "stats": dict(sorted(PROCESS_STATS.items())),
-        "ai_provider": AI_PROVIDER,
+        "ai_provider": ACTIVE_AI_PROVIDER,
+        "preferred_ai_provider": AI_PROVIDER,
+        "provider_selection": PROVIDER_SELECTION_LOG,
         "dry_run": DRY_RUN,
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
     }
@@ -523,53 +595,38 @@ def run_pipeline() -> int:
 
     Collects news from multiple AI company blogs and research sources.
     """
+    global ACTIVE_AI_PROVIDER, PROVIDER_SELECTION_LOG
+
     print("\n" + "#" * 70)
     print("# THREAD-AUTO PIPELINE - Multi-Source AI News Collector")
-    print(f"# AI Provider: {AI_PROVIDER.upper()}")
+    print(f"# Preferred AI Provider: {AI_PROVIDER.upper()}")
     print(f"# Fallback Archive: {'ON' if ENABLE_FALLBACK_ARCHIVE else 'OFF'}")
     print("#" * 70)
     PROCESS_STATS.clear()
+    PROVIDER_SELECTION_LOG = []
 
-    # Validate API key
-    api_key = get_api_key()
-    provider_config = PROVIDERS.get(AI_PROVIDER)
-    if not provider_config:
-        print(f"❌ 지원하지 않는 AI Provider입니다: {AI_PROVIDER}")
-        write_pipeline_summary("failed", error=f"unknown_provider:{AI_PROVIDER}")
-        return 2
+    active_provider, model, client, provider_selection = select_ai_client()
+    ACTIVE_AI_PROVIDER = active_provider
+    PROVIDER_SELECTION_LOG = provider_selection
+    provider_config = PROVIDERS[active_provider]
+    print(f"# Model: {model}")
+    print(f"# Active AI Provider: {active_provider.upper()}")
+    print(f"# Free Limit: {provider_config['free_limit']}")
+    if provider_selection:
+        print(f"# Provider skips: {', '.join(provider_selection)}")
 
-    model = AI_MODEL or provider_config["default_model"]
-    if not api_key:
-        config = PROVIDERS.get(AI_PROVIDER, {})
-        env_key = config.get("env_key", "API_KEY")
+    if client is None:
         if not ENABLE_FALLBACK_ARCHIVE:
-            print(f"❌ {env_key} 환경 변수가 설정되지 않았습니다.")
+            print("❌ 사용 가능한 AI Provider/API 키가 없습니다.")
             print(f"\n{get_provider_info()}")
             write_pipeline_summary(
                 "failed",
-                error=f"missing_api_key:{env_key}",
+                error="no_available_ai_provider",
             )
             return 2
 
-        print(f"⚠️ {env_key} 환경 변수가 없어 fallback archive 모드로 진행합니다.")
-        client = None
-        record_pipeline_stat("missing_api_key_fallback")
-    else:
-        # Create AI client once
-        try:
-            client = create_client(api_key, AI_PROVIDER, model)
-        except Exception as e:
-            if not ENABLE_FALLBACK_ARCHIVE:
-                print(f"❌ AI 클라이언트 생성 실패: {e}")
-                write_pipeline_summary("failed", error=f"client_create_failed:{e}")
-                return 2
-
-            print(f"⚠️ AI 클라이언트 생성 실패 - fallback archive 모드로 진행: {e}")
-            client = None
-            record_pipeline_stat("client_create_failed_fallback")
-
-    print(f"# Model: {model}")
-    print(f"# Free Limit: {provider_config['free_limit']}")
+        print("⚠️ 사용 가능한 AI Provider/API 키가 없어 fallback archive 모드로 진행합니다.")
+        record_pipeline_stat("no_ai_provider_fallback")
 
     # Determine which sources to collect
     if RSS_URL:

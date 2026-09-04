@@ -26,7 +26,7 @@ class FakeCompletions:
     def __init__(self):
         self.last_messages = None
 
-    def create(self, model, messages, response_format):
+    def create(self, model, messages, response_format, **kwargs):
         self.last_messages = messages
         content = {
             "title": "테스트 제목",

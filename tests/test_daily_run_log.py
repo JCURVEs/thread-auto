@@ -16,6 +16,9 @@ def test_daily_run_log_includes_pipeline_summary(monkeypatch, tmp_path):
                 "status": "failed",
                 "total_articles": 0,
                 "error": "no_articles_archived",
+                "ai_provider": "groq",
+                "preferred_ai_provider": "openrouter",
+                "provider_selection": ["openrouter:missing_api_key:OPENROUTER_API_KEY"],
                 "fallback_archive_enabled": True,
                 "stats": {
                     "archived_fallback": 2,
@@ -39,6 +42,9 @@ def test_daily_run_log_includes_pipeline_summary(monkeypatch, tmp_path):
     output = path.read_text(encoding="utf-8")
 
     assert "- Pipeline status: failed" in output
+    assert "- AI provider: groq" in output
+    assert "- Preferred AI provider: openrouter" in output
+    assert "- Provider selection: openrouter:missing_api_key:OPENROUTER_API_KEY" in output
     assert "- Archived articles: 0" in output
     assert "- Pipeline error: no_articles_archived" in output
     assert "- Fallback archive: True" in output

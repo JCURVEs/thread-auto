@@ -67,6 +67,14 @@ def format_pipeline_stats(stats: dict) -> str:
     return ", ".join(f"{key}={value}" for key, value in sorted(stats.items()))
 
 
+def format_provider_selection(selection: list) -> str:
+    """Format provider selection diagnostics for markdown logs."""
+    if not selection:
+        return "none"
+
+    return ", ".join(str(item) for item in selection)
+
+
 def write_daily_run_log(now: datetime | None = None) -> Path:
     """Create or update today's daily run log."""
     now = now or datetime.now(KST)
@@ -80,9 +88,10 @@ def write_daily_run_log(now: datetime | None = None) -> Path:
 
     enabled_sources = get_enabled_sources()
     disabled_sources = get_disabled_sources()
-    provider = os.environ.get("AI_PROVIDER", "groq")
     dry_run = os.environ.get("DRY_RUN", "true")
     summary = read_last_run_summary()
+    provider = summary.get("ai_provider", os.environ.get("AI_PROVIDER", "openrouter"))
+    preferred_provider = summary.get("preferred_ai_provider", provider)
 
     disabled_text = (
         ", ".join(sorted(disabled_sources.keys())) if disabled_sources else "none"
@@ -95,6 +104,8 @@ def write_daily_run_log(now: datetime | None = None) -> Path:
                 "",
                 f"- Run time (KST): {now.strftime('%Y-%m-%d %H:%M:%S')}",
                 f"- AI provider: {provider}",
+                f"- Preferred AI provider: {preferred_provider}",
+                f"- Provider selection: {format_provider_selection(summary.get('provider_selection', []))}",
                 f"- Dry run: {dry_run}",
                 f"- Pipeline status: {summary.get('status', 'unknown')}",
                 f"- Archived articles: {summary.get('total_articles', 'unknown')}",

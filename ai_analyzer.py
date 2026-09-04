@@ -79,27 +79,37 @@ SYSTEM_PROMPT = """
 # FREE AI PROVIDER CONFIGURATIONS
 # =============================================================================
 PROVIDERS = {
+    "openrouter": {
+        "base_url": "https://openrouter.ai/api/v1",
+        "default_model": "qwen/qwen3.8-flash",
+        "env_key": "OPENROUTER_API_KEY",
+        "model_env_key": "OPENROUTER_MODEL",
+        "free_limit": "$0.15/M input, $0.47/M output",
+        "headers": {
+            "HTTP-Referer": "https://github.com/JCURVEs/thread-auto",
+            "X-Title": "thread-auto",
+        },
+        "extra_body": {
+            "reasoning": {"enabled": False},
+        },
+    },
     "groq": {
         "base_url": "https://api.groq.com/openai/v1",
         "default_model": "llama-3.3-70b-versatile",
         "env_key": "GROQ_API_KEY",
+        "model_env_key": "GROQ_MODEL",
         "free_limit": "14,400 req/day"
-    },
-    "openrouter": {
-        "base_url": "https://openrouter.ai/api/v1",
-        "default_model": "qwen/qwen3-30b-a3b:free",
-        "env_key": "OPENROUTER_API_KEY",
-        "free_limit": "50 req/day"
     },
     "gemini": {
         "base_url": None,
         "default_model": "gemini-flash-latest",
         "env_key": "GEMINI_API_KEY",
+        "model_env_key": "GEMINI_MODEL",
         "free_limit": "1,500 req/day"
     },
 }
 
-DEFAULT_PROVIDER = "groq"
+DEFAULT_PROVIDER = "openrouter"
 
 
 def create_client(api_key: str, provider: str = None, model: str = None):
@@ -118,11 +128,37 @@ def create_client(api_key: str, provider: str = None, model: str = None):
 
 
 def _create_openai_compatible_client(api_key: str, base_url: str, model: str):
+    provider_config = next(
+        (
+            config
+            for config in PROVIDERS.values()
+            if config.get("base_url") == base_url
+        ),
+        {},
+    )
+    headers = dict(provider_config.get("headers", {}))
+
     try:
         from openai import OpenAI
-        return {"type": "openai", "client": OpenAI(api_key=api_key, base_url=base_url), "model": model}
+        return {
+            "type": "openai",
+            "client": OpenAI(
+                api_key=api_key,
+                base_url=base_url,
+                default_headers=headers or None,
+            ),
+            "model": model,
+            "extra_body": provider_config.get("extra_body"),
+        }
     except ImportError:
-        return {"type": "requests", "api_key": api_key, "base_url": base_url, "model": model}
+        return {
+            "type": "requests",
+            "api_key": api_key,
+            "base_url": base_url,
+            "model": model,
+            "headers": headers,
+            "extra_body": provider_config.get("extra_body"),
+        }
 
 
 def _create_gemini_client(api_key: str, model: str):
@@ -181,13 +217,20 @@ def generate_thread_content(
             content = None
 
             if client["type"] == "openai":
-                response = client["client"].chat.completions.create(
-                    model=client["model"],
-                    messages=[
+                request_kwargs = {
+                    "model": client["model"],
+                    "messages": [
                         {"role": "system", "content": SYSTEM_PROMPT},
                         {"role": "user", "content": user_prompt}
                     ],
-                    response_format={"type": "json_object"}
+                    "response_format": {"type": "json_object"},
+                    "temperature": 0.2,
+                }
+                if client.get("extra_body"):
+                    request_kwargs["extra_body"] = client["extra_body"]
+
+                response = client["client"].chat.completions.create(
+                    **request_kwargs
                 )
                 content = json.loads(response.choices[0].message.content)
 
@@ -199,12 +242,19 @@ def generate_thread_content(
 
             elif client["type"] == "requests":
                 import requests
-                headers = {"Authorization": f"Bearer {client['api_key']}", "Content-Type": "application/json"}
+                headers = {
+                    "Authorization": f"Bearer {client['api_key']}",
+                    "Content-Type": "application/json",
+                    **client.get("headers", {}),
+                }
                 data = {
                     "model": client["model"],
                     "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": user_prompt}],
-                    "response_format": {"type": "json_object"}
+                    "response_format": {"type": "json_object"},
+                    "temperature": 0.2,
                 }
+                if client.get("extra_body"):
+                    data.update(client["extra_body"])
                 res = requests.post(f"{client['base_url']}/chat/completions", headers=headers, json=data)
                 content = json.loads(res.json()["choices"][0]["message"]["content"])
 
@@ -681,7 +731,7 @@ def get_provider_info() -> str:
 
     lines.append("=" * 60)
     lines.append("Set AI_PROVIDER environment variable to choose provider.")
-    lines.append("Example: export AI_PROVIDER=groq")
+    lines.append("Example: export AI_PROVIDER=openrouter")
     lines.append("=" * 60 + "\n")
 
     return "\n".join(lines)
