@@ -159,7 +159,7 @@ def save_to_archive(
     # Header for new file
     if not os.path.exists(filepath):
         lines.append(f"# Daily AI Tech News ({archive_date.strftime('%Y-%m-%d')})\n\n")
-        lines.append("*Collected from OpenAI, Anthropic, DeepMind, Google Research, Hugging Face, Meta AI, arXiv*\n\n")
+        lines.append("*Collected from configured AI lab, infrastructure, cloud, and paper feeds*\n\n")
         lines.append("---\n\n")
 
     # Company name mapping for readability

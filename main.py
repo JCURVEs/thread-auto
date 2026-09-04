@@ -22,6 +22,10 @@ from time import mktime
 import feedparser
 from dateutil import parser as date_parser
 
+for stream in (sys.stdout, sys.stderr):
+    if hasattr(stream, "reconfigure"):
+        stream.reconfigure(encoding="utf-8")
+
 from rss_collector import (
     fetch_feed,
     fetch_feed_or_scrape,

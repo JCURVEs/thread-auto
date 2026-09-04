@@ -31,6 +31,7 @@ Thumbs.db
 # Local configuration
 .env
 *.local
+.thread_auto_last_run.json
 
 # Private Threads account assets
 data/threads/raw/
