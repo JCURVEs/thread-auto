@@ -79,12 +79,19 @@ SYSTEM_PROMPT = """
 # FREE AI PROVIDER CONFIGURATIONS
 # =============================================================================
 PROVIDERS = {
+    "groq": {
+        "base_url": "https://api.groq.com/openai/v1",
+        "default_model": "llama-3.3-70b-versatile",
+        "env_key": "GROQ_API_KEY",
+        "model_env_key": "GROQ_MODEL",
+        "free_limit": "14,400 req/day"
+    },
     "openrouter": {
         "base_url": "https://openrouter.ai/api/v1",
-        "default_model": "qwen/qwen3.8-flash",
+        "default_model": "qwen/qwen3-30b-a3b:free",
         "env_key": "OPENROUTER_API_KEY",
         "model_env_key": "OPENROUTER_MODEL",
-        "free_limit": "$0.15/M input, $0.47/M output",
+        "free_limit": "free models only (:free)",
         "headers": {
             "HTTP-Referer": "https://github.com/JCURVEs/thread-auto",
             "X-Title": "thread-auto",
@@ -92,13 +99,6 @@ PROVIDERS = {
         "extra_body": {
             "reasoning": {"enabled": False},
         },
-    },
-    "groq": {
-        "base_url": "https://api.groq.com/openai/v1",
-        "default_model": "llama-3.3-70b-versatile",
-        "env_key": "GROQ_API_KEY",
-        "model_env_key": "GROQ_MODEL",
-        "free_limit": "14,400 req/day"
     },
     "gemini": {
         "base_url": None,
@@ -109,7 +109,7 @@ PROVIDERS = {
     },
 }
 
-DEFAULT_PROVIDER = "openrouter"
+DEFAULT_PROVIDER = "groq"
 
 
 def create_client(api_key: str, provider: str = None, model: str = None):
@@ -731,7 +731,7 @@ def get_provider_info() -> str:
 
     lines.append("=" * 60)
     lines.append("Set AI_PROVIDER environment variable to choose provider.")
-    lines.append("Example: export AI_PROVIDER=openrouter")
+    lines.append("Example: export AI_PROVIDER=groq")
     lines.append("=" * 60 + "\n")
 
     return "\n".join(lines)

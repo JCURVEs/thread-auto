@@ -55,7 +55,8 @@ from source_registry import calculate_collection_score, get_disabled_sources
 # --- Configuration ---
 AI_PROVIDER = os.environ.get("AI_PROVIDER", DEFAULT_PROVIDER)
 AI_MODEL = os.environ.get("AI_MODEL", None)  # None = 제공자 기본 모델 사용
-AI_PROVIDER_FALLBACKS = os.environ.get("AI_PROVIDER_FALLBACKS", "openrouter,groq,gemini")
+AI_PROVIDER_FALLBACKS = os.environ.get("AI_PROVIDER_FALLBACKS", "groq,gemini,openrouter")
+ALLOW_PAID_MODELS = os.environ.get("ALLOW_PAID_MODELS", "False").lower() in ("true", "1", "yes")
 THREADS_ACCESS_TOKEN = os.environ.get("THREADS_ACCESS_TOKEN")
 RSS_URL = os.environ.get("RSS_URL", None)  # If None, use all sources
 COLLECT_ALL_SOURCES = os.environ.get("COLLECT_ALL_SOURCES", "True").lower() in ("true", "1", "yes")
@@ -110,6 +111,17 @@ def get_model_for_provider(provider: str, preferred_model: Optional[str] = None)
     return config["default_model"]
 
 
+def blocks_paid_model(provider: str, model: str) -> bool:
+    """Block known paid model routes unless explicitly allowed."""
+    if ALLOW_PAID_MODELS:
+        return False
+
+    if provider == "openrouter":
+        return not model.endswith(":free")
+
+    return False
+
+
 def select_ai_client() -> tuple[str, str, Optional[dict], list[str]]:
     """Pick the first configured AI provider and fall back deterministically."""
     skipped = []
@@ -122,6 +134,11 @@ def select_ai_client() -> tuple[str, str, Optional[dict], list[str]]:
             continue
 
         model = get_model_for_provider(provider, AI_MODEL)
+        if blocks_paid_model(provider, model):
+            skipped.append(f"{provider}:paid_model_blocked:{model}")
+            record_pipeline_stat(f"provider_paid_model_blocked_{provider}")
+            continue
+
         api_key = get_api_key(provider)
         if not api_key:
             skipped.append(f"{provider}:missing_api_key:{config['env_key']}")

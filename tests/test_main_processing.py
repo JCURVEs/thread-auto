@@ -244,44 +244,12 @@ def test_process_single_entry_archives_fallback_without_ai_client(monkeypatch):
     assert captured["source_name"] == "nvidia_korea_blog"
 
 
-def test_select_ai_client_prefers_openrouter_qwen38(monkeypatch):
-    """기본 provider는 OpenRouter의 Qwen3.8 Flash여야 함."""
+def test_select_ai_client_prefers_groq_free_provider(monkeypatch):
+    """기본 provider는 Groq 무료 티어여야 함."""
 
     main.PROCESS_STATS.clear()
-    monkeypatch.setattr(main, "AI_PROVIDER", "openrouter")
-    monkeypatch.setattr(main, "AI_PROVIDER_FALLBACKS", "openrouter,groq,gemini")
-    monkeypatch.setattr(main, "AI_MODEL", None)
-    monkeypatch.delenv("OPENROUTER_MODEL", raising=False)
-    monkeypatch.setattr(
-        main,
-        "get_api_key",
-        lambda provider=None: "openrouter-key" if provider == "openrouter" else None,
-    )
-    monkeypatch.setattr(
-        main,
-        "create_client",
-        lambda api_key, provider, model: {
-            "api_key": api_key,
-            "provider": provider,
-            "model": model,
-        },
-    )
-
-    provider, model, client, skipped = main.select_ai_client()
-
-    assert provider == "openrouter"
-    assert model == "qwen/qwen3.8-flash"
-    assert client["provider"] == "openrouter"
-    assert client["api_key"] == "openrouter-key"
-    assert skipped == []
-
-
-def test_select_ai_client_falls_back_to_groq_when_openrouter_key_missing(monkeypatch):
-    """OpenRouter 키가 없으면 같은 실행에서 Groq로 자동 전환해야 함."""
-
-    main.PROCESS_STATS.clear()
-    monkeypatch.setattr(main, "AI_PROVIDER", "openrouter")
-    monkeypatch.setattr(main, "AI_PROVIDER_FALLBACKS", "openrouter,groq,gemini")
+    monkeypatch.setattr(main, "AI_PROVIDER", "groq")
+    monkeypatch.setattr(main, "AI_PROVIDER_FALLBACKS", "groq,gemini,openrouter")
     monkeypatch.setattr(main, "AI_MODEL", None)
     monkeypatch.delenv("GROQ_MODEL", raising=False)
     monkeypatch.setattr(
@@ -304,8 +272,74 @@ def test_select_ai_client_falls_back_to_groq_when_openrouter_key_missing(monkeyp
     assert provider == "groq"
     assert model == "llama-3.3-70b-versatile"
     assert client["provider"] == "groq"
-    assert any(item.startswith("openrouter:missing_api_key") for item in skipped)
-    assert main.PROCESS_STATS["provider_missing_key_openrouter"] == 1
+    assert client["api_key"] == "groq-key"
+    assert skipped == []
+
+
+def test_select_ai_client_blocks_paid_openrouter_model_by_default(monkeypatch):
+    """OpenRouter 유료 모델은 명시 허용 전에는 호출하지 않아야 함."""
+
+    main.PROCESS_STATS.clear()
+    monkeypatch.setattr(main, "AI_PROVIDER", "openrouter")
+    monkeypatch.setattr(main, "AI_PROVIDER_FALLBACKS", "openrouter,groq,gemini")
+    monkeypatch.setattr(main, "AI_MODEL", None)
+    monkeypatch.setattr(main, "ALLOW_PAID_MODELS", False)
+    monkeypatch.setenv("OPENROUTER_MODEL", "qwen/qwen3.8-flash")
+    monkeypatch.delenv("GROQ_MODEL", raising=False)
+    monkeypatch.setattr(
+        main,
+        "get_api_key",
+        lambda provider=None: f"{provider}-key",
+    )
+    monkeypatch.setattr(
+        main,
+        "create_client",
+        lambda api_key, provider, model: {
+            "api_key": api_key,
+            "provider": provider,
+            "model": model,
+        },
+    )
+
+    provider, model, client, skipped = main.select_ai_client()
+
+    assert provider == "groq"
+    assert model == "llama-3.3-70b-versatile"
+    assert client["provider"] == "groq"
+    assert any(item == "openrouter:paid_model_blocked:qwen/qwen3.8-flash" for item in skipped)
+    assert main.PROCESS_STATS["provider_paid_model_blocked_openrouter"] == 1
+
+
+def test_select_ai_client_allows_openrouter_free_model(monkeypatch):
+    """OpenRouter를 쓰더라도 :free 모델이면 허용해야 함."""
+
+    main.PROCESS_STATS.clear()
+    monkeypatch.setattr(main, "AI_PROVIDER", "openrouter")
+    monkeypatch.setattr(main, "AI_PROVIDER_FALLBACKS", "openrouter,groq,gemini")
+    monkeypatch.setattr(main, "AI_MODEL", None)
+    monkeypatch.setattr(main, "ALLOW_PAID_MODELS", False)
+    monkeypatch.setenv("OPENROUTER_MODEL", "qwen/qwen3-30b-a3b:free")
+    monkeypatch.setattr(
+        main,
+        "get_api_key",
+        lambda provider=None: "openrouter-key" if provider == "openrouter" else None,
+    )
+    monkeypatch.setattr(
+        main,
+        "create_client",
+        lambda api_key, provider, model: {
+            "api_key": api_key,
+            "provider": provider,
+            "model": model,
+        },
+    )
+
+    provider, model, client, skipped = main.select_ai_client()
+
+    assert provider == "openrouter"
+    assert model == "qwen/qwen3-30b-a3b:free"
+    assert client["provider"] == "openrouter"
+    assert skipped == []
 
 
 def test_process_single_entry_blocks_ungrounded_claims(monkeypatch):
@@ -347,7 +381,7 @@ def test_run_pipeline_fails_when_api_key_missing(monkeypatch, tmp_path):
     assert summary["status"] == "failed"
     assert summary["error"] == "no_available_ai_provider"
     assert any(
-        item.startswith("openrouter:missing_api_key")
+        item.startswith("groq:missing_api_key")
         for item in summary["provider_selection"]
     )
 
@@ -380,7 +414,7 @@ def test_run_pipeline_can_archive_fallback_when_api_key_missing(monkeypatch, tmp
     assert summary["status"] == "success"
     assert summary["total_articles"] == 1
     assert summary["fallback_archive_enabled"] is True
-    assert summary["ai_provider"] == "openrouter"
+    assert summary["ai_provider"] == "groq"
     assert summary["stats"]["no_ai_provider_fallback"] == 1
 
 

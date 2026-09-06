@@ -19,6 +19,13 @@ from source_registry import (
 
 DEFAULT_RSS_SOURCES = get_enabled_sources()
 
+ARXIV_SOURCE_CATEGORIES = {
+    "arxiv_ai": "cs.AI",
+    "arxiv_lg": "cs.LG",
+    "arxiv_cv": "cs.CV",
+    "arxiv_cl": "cs.CL",
+}
+
 
 def fetch_feed(url: str) -> Optional[feedparser.FeedParserDict]:
     """
@@ -118,7 +125,12 @@ def fetch_feed_or_scrape(source_name: str, url: str) -> Optional[Any]:
 
     # Default: use RSS feed
     feed = fetch_feed(url)
-    return filter_feed_entries(source_name, feed)
+    filtered_feed = filter_feed_entries(source_name, feed)
+    if source_name in ARXIV_SOURCE_CATEGORIES and not get_entries(filtered_feed, count=1):
+        print(f"⚠️ arXiv RSS entries 없음 - API fallback 시도: {source_name}")
+        return fetch_arxiv_api(source_name)
+
+    return filtered_feed
 
 
 def make_mock_feed(entries: List[Dict[str, Any]]) -> Any:
@@ -205,6 +217,58 @@ def fetch_listing_page(source_name: str, url: str, limit: int = 15) -> Optional[
         return make_mock_feed(entries)
     except Exception as e:
         print(f"❌ HTML listing 스크래핑 실패 ({source_name}): {e}")
+        return None
+
+
+def fetch_arxiv_api(source_name: str, limit: int = 15) -> Optional[Any]:
+    """Fetch recent arXiv entries via the official Atom API when RSS is empty."""
+    category = ARXIV_SOURCE_CATEGORIES.get(source_name)
+    if not category:
+        return None
+
+    try:
+        import requests
+
+        headers = {
+            "User-Agent": "Thread-Auto/2.0 (+https://github.com/JCURVEs/thread-auto)"
+        }
+        response = requests.get(
+            "https://export.arxiv.org/api/query",
+            params={
+                "search_query": f"cat:{category}",
+                "sortBy": "submittedDate",
+                "sortOrder": "descending",
+                "max_results": str(limit),
+            },
+            headers=headers,
+            timeout=20,
+        )
+        response.raise_for_status()
+
+        feed = feedparser.parse(response.content)
+        entries = []
+        for entry in feed.entries[:limit]:
+            title = " ".join(str(entry.get("title", "")).split())
+            summary = " ".join(str(entry.get("summary", "")).split())
+            link = str(entry.get("link", ""))
+            if not title or not link:
+                continue
+
+            entries.append({
+                "title": title,
+                "link": link,
+                "summary": summary,
+                "description": summary,
+                "published": entry.get("published", entry.get("updated", "")),
+                "updated": entry.get("updated", ""),
+            })
+
+        if not entries:
+            return None
+
+        return make_mock_feed(entries)
+    except Exception as e:
+        print(f"❌ arXiv API fallback 실패 ({source_name}): {e}")
         return None
 
 

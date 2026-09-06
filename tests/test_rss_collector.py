@@ -8,6 +8,7 @@ import pytest
 from rss_collector import (
     fetch_feed,
     fetch_feed_or_scrape,
+    fetch_arxiv_api,
     get_latest_entry,
     get_entries,
     get_entry_info,
@@ -77,6 +78,44 @@ def test_get_entry_info():
     # 값이 비어있지 않은지 확인
     assert len(info["title"]) > 0
     assert len(info["link"]) > 0
+
+
+def test_arxiv_api_fallback_builds_feed(monkeypatch):
+    """arXiv RSS가 비어도 공식 API 응답으로 feed-like entries를 만들어야 함."""
+
+    class FakeResponse:
+        content = b"""<?xml version="1.0" encoding="UTF-8"?>
+        <feed xmlns="http://www.w3.org/2005/Atom">
+          <entry>
+            <id>http://arxiv.org/abs/2609.00001v1</id>
+            <updated>2026-09-04T00:00:00Z</updated>
+            <published>2026-09-04T00:00:00Z</published>
+            <title>Test arXiv Paper</title>
+            <summary>This paper tests fallback collection.</summary>
+            <link href="http://arxiv.org/abs/2609.00001v1" rel="alternate" type="text/html"/>
+          </entry>
+        </feed>
+        """
+
+        def raise_for_status(self):
+            return None
+
+    def fake_get(url, params, headers, timeout):
+        assert url == "https://export.arxiv.org/api/query"
+        assert params["search_query"] == "cat:cs.AI"
+        return FakeResponse()
+
+    import requests
+
+    monkeypatch.setattr(requests, "get", fake_get)
+
+    feed = fetch_arxiv_api("arxiv_ai")
+    entries = get_entries(feed, count=1)
+
+    assert len(entries) == 1
+    assert entries[0]["title"] == "Test arXiv Paper"
+    assert entries[0]["link"] == "http://arxiv.org/abs/2609.00001v1"
+    assert entries[0]["published"] == "2026-09-04T00:00:00Z"
 
 
 def test_all_default_sources_available():
