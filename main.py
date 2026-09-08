@@ -48,7 +48,7 @@ from ai_analyzer import (
     DEFAULT_PROVIDER
 )
 from thread_formatter import print_dry_run, post_to_threads
-from archiver import save_to_archive, is_duplicate
+from archiver import save_to_archive, save_to_pending, is_duplicate
 from source_registry import calculate_collection_score, get_disabled_sources
 
 
@@ -62,7 +62,10 @@ RSS_URL = os.environ.get("RSS_URL", None)  # If None, use all sources
 COLLECT_ALL_SOURCES = os.environ.get("COLLECT_ALL_SOURCES", "True").lower() in ("true", "1", "yes")
 DRY_RUN = os.environ.get("DRY_RUN", "True").lower() in ("true", "1", "yes")
 REQUIRE_DAILY_ARTICLE = os.environ.get("REQUIRE_DAILY_ARTICLE", "False").lower() in ("true", "1", "yes")
-ENABLE_FALLBACK_ARCHIVE = os.environ.get("ENABLE_FALLBACK_ARCHIVE", "False").lower() in ("true", "1", "yes")
+ENABLE_PENDING_ARCHIVE = os.environ.get(
+    "ENABLE_PENDING_ARCHIVE",
+    os.environ.get("ENABLE_FALLBACK_ARCHIVE", "False"),
+).lower() in ("true", "1", "yes")
 LAST_RUN_SUMMARY_PATH = Path(__file__).resolve().parent / ".thread_auto_last_run.json"
 PROCESS_STATS = Counter()
 ACTIVE_AI_PROVIDER = AI_PROVIDER
@@ -357,118 +360,7 @@ def analyze_article_with_fallback(
     return None, primary_provider, model, failures
 
 
-def clean_fallback_text(text: str, max_len: int = 420) -> str:
-    """Clean RSS or scraped text enough to store as source-grounded fallback."""
-    if not text:
-        return ""
-
-    cleaned = re.sub(r"<[^>]+>", " ", text)
-    cleaned = re.sub(r"\s+", " ", cleaned).strip()
-    if len(cleaned) <= max_len:
-        return cleaned
-    return cleaned[: max_len - 3].rstrip() + "..."
-
-
-def infer_fallback_category(source_name: str, title: str, text: str) -> str:
-    """Infer a conservative category for fallback archive items."""
-    source = source_name.lower()
-    haystack = f"{title} {text}".lower()
-
-    if source.startswith("arxiv"):
-        return "연구 논문"
-    if "nvidia" in source or "cloud" in source or "developer" in source:
-        return "API/인프라"
-    if "research" in source or "deepmind" in source:
-        return "AI 연구"
-    if any(keyword in haystack for keyword in ("robot", "embodied", "physical ai", "vla", "3d")):
-        return "피지컬 AI"
-    if any(keyword in haystack for keyword in ("agent", "workflow", "automation")):
-        return "에이전트/자동화"
-    if any(keyword in haystack for keyword in ("model", "llm", "reasoning", "multimodal")):
-        return "모델/멀티모달"
-    return "기타"
-
-
-def infer_fallback_importance(source_name: str, title: str, text: str) -> int:
-    """Give fallback items a useful but conservative curation score."""
-    source = source_name.lower()
-    haystack = f"{title} {text}".lower()
-    importance = 5
-
-    high_signal_sources = (
-        "openai",
-        "anthropic",
-        "deepmind",
-        "google_research",
-        "nvidia_technical",
-        "nvidia_developer_ai",
-        "nvidia_korea_blog",
-        "microsoft_research",
-    )
-    if source in high_signal_sources:
-        importance += 1
-    if any(keyword in haystack for keyword in ("release", "launch", "benchmark", "paper", "research", "model")):
-        importance += 1
-
-    return min(7, max(4, importance))
-
-
-def choose_fallback_source_text(
-    source_name: str,
-    original_summary: str,
-    article_content: str,
-    description: str = "",
-) -> str:
-    """Choose source-grounded text while avoiding known scraper boilerplate."""
-    rss_text = original_summary or description
-    article_lower = (article_content or "").lower()
-    boilerplate_markers = (
-        "arxivlabs is a framework",
-        "collaborators to develop and share new arxiv features",
-        "enable javascript and cookies to continue",
-        "checking your browser before accessing",
-    )
-
-    if source_name.lower().startswith("arxiv") and rss_text:
-        return rss_text
-    if rss_text and any(marker in article_lower for marker in boilerplate_markers):
-        return rss_text
-    return article_content or rss_text
-
-
-def build_fallback_content(
-    info: dict,
-    source_name: str,
-    original_summary: str,
-    article_content: str,
-    failure_reason: str,
-) -> dict:
-    """Build source-grounded archive content when AI analysis cannot be trusted."""
-    source_text = choose_fallback_source_text(
-        source_name,
-        original_summary,
-        article_content,
-        info.get("description", ""),
-    )
-    title = clean_fallback_text(info.get("title", "제목 없음"), max_len=120)
-    summary = clean_fallback_text(source_text, max_len=420) or title
-    category = infer_fallback_category(source_name, title, summary)
-
-    return {
-        "title": title,
-        "summary": summary,
-        "easy_explainer": (
-            "AI 분석 결과를 신뢰하기 어려워 원문/RSS 기준으로 먼저 보관한 후보입니다. "
-            "게시 전 원문 확인과 스레드 스타일 편집이 필요합니다."
-        ),
-        "category": category,
-        "importance": infer_fallback_importance(source_name, title, summary),
-        "analysis_status": "fallback",
-        "analysis_error": failure_reason,
-    }
-
-
-def save_fallback_archive(
+def queue_pending_item(
     info: dict,
     source_name: str,
     image_url: Optional[str],
@@ -478,38 +370,30 @@ def save_fallback_archive(
     article_content_used: bool,
     failure_reason: str,
 ) -> bool:
-    """Archive a deterministic fallback item instead of losing the source entirely."""
-    record_pipeline_stat("fallback_attempted")
-    if not ENABLE_FALLBACK_ARCHIVE:
-        record_pipeline_stat("fallback_disabled")
+    """Queue a failed item as raw data without publishing an English fallback."""
+    record_pipeline_stat("pending_attempted")
+    if not ENABLE_PENDING_ARCHIVE:
+        record_pipeline_stat("pending_disabled")
         return False
 
-    content = build_fallback_content(
-        info,
-        source_name,
-        original_summary,
-        article_content if article_content_used else "",
-        failure_reason,
-    )
-
     try:
-        save_to_archive(
-            content,
-            image_url,
-            info["link"],
-            info["title"],
-            ACTIVE_AI_PROVIDER,
-            model,
-            source_name,
+        pending_path = save_to_pending(
+            source_url=info["link"],
+            original_title=info["title"],
             original_summary=original_summary,
-            article_content_used=article_content_used,
+            article_content=article_content if article_content_used else "",
+            image_url=image_url,
+            provider=ACTIVE_AI_PROVIDER,
+            model=model,
+            source_name=source_name,
+            error=failure_reason,
         )
-        record_pipeline_stat("archived_fallback")
-        print(f"  💾 fallback 아카이브 저장 완료 ({failure_reason})")
-        return True
+        record_pipeline_stat("queued_pending")
+        print(f"  📥 한국어 분석 대기열로 이동: {pending_path}")
+        return False
     except Exception as e:
         record_pipeline_stat("archive_failed")
-        print(f"  ⚠️ fallback 아카이빙 실패: {e}")
+        print(f"  ⚠️ pending 대기열 저장 실패: {e}")
         return False
 
 
@@ -587,9 +471,9 @@ def process_single_entry(entry: dict, source_name: str, client: Optional[dict], 
     # Step 4: AI Analysis
     analysis_input = article_content if article_content_used else ""
     if client is None:
-        print(f"  ⚠️ AI 클라이언트 없음 - fallback 아카이브로 보관")
+        print(f"  ⚠️ AI 클라이언트 없음 - 한국어 분석 pending 대기열로 보관")
         record_pipeline_stat("ai_missing_client")
-        return save_fallback_archive(
+        return queue_pending_item(
             info,
             source_name,
             image_url,
@@ -618,7 +502,7 @@ def process_single_entry(entry: dict, source_name: str, client: Optional[dict], 
                 max_len=300,
             )
         print(f"  ❌ 사용 가능한 무료 AI 분석 모두 실패: {reason}")
-        return save_fallback_archive(
+        return queue_pending_item(
             info,
             source_name,
             image_url,
@@ -721,7 +605,7 @@ def write_pipeline_summary(
         "source_results": source_results or [],
         "error": error,
         "require_daily_article": REQUIRE_DAILY_ARTICLE,
-        "fallback_archive_enabled": ENABLE_FALLBACK_ARCHIVE,
+        "pending_archive_enabled": ENABLE_PENDING_ARCHIVE,
         "stats": dict(sorted(PROCESS_STATS.items())),
         "ai_provider": ACTIVE_AI_PROVIDER,
         "preferred_ai_provider": AI_PROVIDER,
@@ -746,7 +630,7 @@ def run_pipeline() -> int:
     print("\n" + "#" * 70)
     print("# THREAD-AUTO PIPELINE - Multi-Source AI News Collector")
     print(f"# Preferred AI Provider: {AI_PROVIDER.upper()}")
-    print(f"# Fallback Archive: {'ON' if ENABLE_FALLBACK_ARCHIVE else 'OFF'}")
+    print(f"# Pending Archive: {'ON' if ENABLE_PENDING_ARCHIVE else 'OFF'}")
     print("#" * 70)
     PROCESS_STATS.clear()
     PROVIDER_SELECTION_LOG = []
@@ -762,7 +646,7 @@ def run_pipeline() -> int:
         print(f"# Provider skips: {', '.join(provider_selection)}")
 
     if client is None:
-        if not ENABLE_FALLBACK_ARCHIVE:
+        if not ENABLE_PENDING_ARCHIVE:
             print("❌ 사용 가능한 AI Provider/API 키가 없습니다.")
             print(f"\n{get_provider_info()}")
             write_pipeline_summary(
@@ -771,8 +655,8 @@ def run_pipeline() -> int:
             )
             return 2
 
-        print("⚠️ 사용 가능한 AI Provider/API 키가 없어 fallback archive 모드로 진행합니다.")
-        record_pipeline_stat("no_ai_provider_fallback")
+        print("⚠️ 사용 가능한 AI Provider/API 키가 없어 pending 대기열로만 보관합니다.")
+        record_pipeline_stat("no_ai_provider_pending")
 
     # Determine which sources to collect
     if RSS_URL:

@@ -81,10 +81,10 @@ SYSTEM_PROMPT = """
 PROVIDERS = {
     "groq": {
         "base_url": "https://api.groq.com/openai/v1",
-        "default_model": "llama-3.3-70b-versatile",
+        "default_model": "qwen/qwen3.8-27b",
         "env_key": "GROQ_API_KEY",
         "model_env_key": "GROQ_MODEL",
-        "free_limit": "14,400 req/day"
+        "free_limit": "1,000 req/day, 200K tokens/day"
     },
     "gemini": {
         "base_url": None,
@@ -182,6 +182,9 @@ def generate_thread_content(
     Generate newsletter content from news with foreign text validation.
     Now specifically follows the Newsletter format.
     """
+    title = (title or "")[:500]
+    description = (description or "")[:6000]
+    article_content = (article_content or "")[:12000]
     article_section = ""
     if article_content:
         article_section = f"""
@@ -205,6 +208,8 @@ def generate_thread_content(
     중국어/일본어 한자, 히라가나, 가타카나, 키릴 문자, 베트남어 단어를 섞어 쓰지 마세요.
     "数学", "品質", "最近", "検証", "提出", "khuyến", "Depends" 같은 깨진 혼합 문자는 절대 쓰지 마세요.
     한국어와 영어 단어가 붙어 있으면 띄어 쓰세요. 예: "최신Foundation" 금지, "최신 Foundation" 허용.
+    "AI 분석 결과를 신뢰하기 어렵다", "확인이 필요하다" 같은 내부 상태 문구를 요약과 쉬운 설명에 쓰지 마세요.
+    쉬운 설명은 기술의 핵심을 일상적인 비유나 구체적인 예시로 한 문장에 풀어 쓰세요.
 
     위 뉴스를 'Tech Newsletter Curator'의 관점에서 분석하여 **순수 한국어로만** JSON을 작성해줘.
     """
@@ -224,6 +229,7 @@ def generate_thread_content(
                     ],
                     "response_format": {"type": "json_object"},
                     "temperature": 0.2,
+                    "max_tokens": 1200,
                 }
                 if client.get("extra_body"):
                     request_kwargs["extra_body"] = client["extra_body"]
@@ -251,6 +257,7 @@ def generate_thread_content(
                     "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": user_prompt}],
                     "response_format": {"type": "json_object"},
                     "temperature": 0.2,
+                    "max_tokens": 1200,
                 }
                 if client.get("extra_body"):
                     data.update(client["extra_body"])

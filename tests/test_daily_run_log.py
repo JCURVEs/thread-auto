@@ -19,7 +19,7 @@ def test_daily_run_log_includes_pipeline_summary(monkeypatch, tmp_path):
                 "ai_provider": "groq",
                 "preferred_ai_provider": "groq",
                 "provider_selection": [],
-                "fallback_archive_enabled": True,
+                "pending_archive_enabled": True,
                 "stats": {
                     "archived_fallback": 2,
                     "quality_gate_failed": 2,
@@ -47,5 +47,5 @@ def test_daily_run_log_includes_pipeline_summary(monkeypatch, tmp_path):
     assert "- Provider selection: none" in output
     assert "- Archived articles: 0" in output
     assert "- Pipeline error: no_articles_archived" in output
-    assert "- Fallback archive: True" in output
+    assert "- Pending archive: True" in output
     assert "- Pipeline stats: archived_fallback=2, quality_gate_failed=2" in output

@@ -44,7 +44,7 @@ jobs:
         AI_PROVIDER_FALLBACKS: 'groq'
         ALLOW_PAID_MODELS: 'false'
         AI_MODEL: ${{ vars.AI_MODEL || '' }}
-        GROQ_MODEL: ${{ vars.GROQ_MODEL || '' }}
+        GROQ_MODEL: ${{ vars.GROQ_MODEL || 'qwen/qwen3.8-27b' }}
         GEMINI_MODEL: ${{ vars.GEMINI_MODEL || '' }}
         
         # API Keys (GitHub Secrets에 등록)
@@ -59,7 +59,7 @@ jobs:
         COLLECT_ALL_SOURCES: 'true'
         DRY_RUN: ${{ github.event.inputs.dry_run || vars.DRY_RUN || 'true' }}
         REQUIRE_DAILY_ARTICLE: 'true'
-        ENABLE_FALLBACK_ARCHIVE: 'true'
+        ENABLE_PENDING_ARCHIVE: 'true'
       run: python main.py
 
     - name: 🗓️ 일일 실행 로그 생성

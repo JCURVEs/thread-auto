@@ -4,6 +4,7 @@ Archiver module for Thread-Auto.
 Handles saving news in the specific 'Newsletter Format' requested by the user.
 """
 
+import json
 import os
 import glob
 from datetime import datetime
@@ -38,6 +39,21 @@ def get_archive_path(date: Optional[datetime] = None) -> str:
         os.makedirs(archive_dir, exist_ok=True)
 
     return os.path.join(archive_dir, filename)
+
+
+def get_pending_path(date: Optional[datetime] = None) -> str:
+    """Get the JSONL path for source items that still need Korean analysis."""
+    if date is None:
+        date = datetime.now()
+
+    pending_dir = os.path.join(
+        get_archive_dir(),
+        "pending",
+        date.strftime("%Y"),
+        date.strftime("%m월"),
+    )
+    os.makedirs(pending_dir, exist_ok=True)
+    return os.path.join(pending_dir, date.strftime("%Y-%m-%d.jsonl"))
 
 
 def list_archive_files() -> List[str]:
@@ -114,6 +130,28 @@ def get_archived_urls(days: int = 7) -> Set[str]:
     return archived_urls
 
 
+def get_pending_urls() -> Set[str]:
+    """Return source URLs already queued for later Korean analysis."""
+    pending_dir = os.path.join(get_archive_dir(), "pending")
+    if not os.path.exists(pending_dir):
+        return set()
+
+    urls = set()
+    for filepath in glob.glob(os.path.join(pending_dir, "**", "*.jsonl"), recursive=True):
+        try:
+            with open(filepath, "r", encoding="utf-8") as file:
+                for line in file:
+                    try:
+                        record = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if record.get("source_url"):
+                        urls.add(record["source_url"])
+        except OSError as error:
+            print(f"⚠️ pending 파일 읽기 실패 ({filepath}): {error}")
+    return urls
+
+
 def is_duplicate(url: str) -> bool:
     """
     Check if URL is already archived.
@@ -125,7 +163,37 @@ def is_duplicate(url: str) -> bool:
         True if URL is already archived, False otherwise
     """
     archived_urls = get_archived_urls()
-    return url in archived_urls
+    return url in archived_urls or url in get_pending_urls()
+
+
+def save_to_pending(
+    source_url: str,
+    original_title: str,
+    original_summary: str,
+    article_content: str,
+    image_url: Optional[str],
+    provider: str,
+    model: str,
+    source_name: str,
+    error: str,
+) -> str:
+    """Preserve a failed source as raw JSONL without polluting the public archive."""
+    filepath = get_pending_path()
+    record = {
+        "queued_at": datetime.now().isoformat(timespec="seconds"),
+        "source_name": source_name,
+        "source_url": source_url,
+        "original_title": original_title,
+        "original_summary": original_summary,
+        "article_content": (article_content or "")[:20000],
+        "image_url": image_url,
+        "provider": provider,
+        "model": model,
+        "error": error,
+    }
+    with open(filepath, "a", encoding="utf-8") as file:
+        file.write(json.dumps(record, ensure_ascii=False) + "\n")
+    return filepath
 
 def save_to_archive(
     data: Dict[str, Any],

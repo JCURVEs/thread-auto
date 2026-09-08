@@ -166,12 +166,12 @@ def test_process_single_entry_blocks_quality_gate_failures(monkeypatch):
     assert captured["saved"] is False
 
 
-def test_process_single_entry_archives_fallback_when_quality_gate_fails(monkeypatch):
-    """Fallback archive가 켜져 있으면 품질 실패도 원문 기반 후보로 보관해야 함."""
+def test_process_single_entry_queues_pending_when_quality_gate_fails(monkeypatch):
+    """품질 실패 콘텐츠는 공개 Markdown 대신 pending 원자료로 보관해야 함."""
 
     captured = {}
 
-    monkeypatch.setattr(main, "ENABLE_FALLBACK_ARCHIVE", True)
+    monkeypatch.setattr(main, "ENABLE_PENDING_ARCHIVE", True)
     main.PROCESS_STATS.clear()
     monkeypatch.setattr(main, "is_duplicate", lambda url: False)
     monkeypatch.setattr(main, "get_article_image", lambda url: None)
@@ -182,64 +182,40 @@ def test_process_single_entry_archives_fallback_when_quality_gate_fails(monkeypa
         content["summary"] = "정말 혁신적인 도구이며 品質 평가를 포함합니다."
         return content
 
-    def fake_save_to_archive(
-        data,
-        image_url,
-        source_url,
-        original_title,
-        provider,
-        model,
-        source_name,
-        original_summary=None,
-        article_content_used=False,
-    ):
-        captured["data"] = data
-        captured["article_content_used"] = article_content_used
-        return "archive/test.md"
+    def fake_save_to_pending(**kwargs):
+        captured.update(kwargs)
+        return "archive/pending/test.jsonl"
 
     monkeypatch.setattr(main, "generate_thread_content", fake_generate_thread_content)
-    monkeypatch.setattr(main, "save_to_archive", fake_save_to_archive)
+    monkeypatch.setattr(main, "save_to_pending", fake_save_to_pending)
 
-    assert main.process_single_entry(make_recent_entry(), "openai", {}, "test-model")
-    assert captured["data"]["analysis_status"] == "fallback"
-    assert captured["data"]["analysis_error"].startswith("quality_gate_failed")
-    assert captured["article_content_used"] is True
+    assert not main.process_single_entry(make_recent_entry(), "openai", {}, "test-model")
+    assert captured["error"].startswith("quality_gate_failed")
+    assert captured["original_summary"] == "RSS summary only"
+    assert captured["article_content"].startswith("원문 본문입니다.")
     assert main.PROCESS_STATS["quality_gate_failed"] == 1
-    assert main.PROCESS_STATS["archived_fallback"] == 1
+    assert main.PROCESS_STATS["queued_pending"] == 1
 
 
-def test_process_single_entry_archives_fallback_without_ai_client(monkeypatch):
-    """AI 클라이언트가 없을 때도 fallback 후보를 저장할 수 있어야 함."""
+def test_process_single_entry_queues_pending_without_ai_client(monkeypatch):
+    """AI 클라이언트가 없을 때도 원자료를 pending 큐에 보관해야 함."""
 
     captured = {}
 
-    monkeypatch.setattr(main, "ENABLE_FALLBACK_ARCHIVE", True)
+    monkeypatch.setattr(main, "ENABLE_PENDING_ARCHIVE", True)
     main.PROCESS_STATS.clear()
     monkeypatch.setattr(main, "is_duplicate", lambda url: False)
     monkeypatch.setattr(main, "get_article_image", lambda url: "https://example.com/image.png")
     monkeypatch.setattr(main, "fetch_article_content", lambda url: "")
 
-    def fake_save_to_archive(
-        data,
-        image_url,
-        source_url,
-        original_title,
-        provider,
-        model,
-        source_name,
-        original_summary=None,
-        article_content_used=False,
-    ):
-        captured["data"] = data
-        captured["image_url"] = image_url
-        captured["source_name"] = source_name
-        return "archive/test.md"
+    def fake_save_to_pending(**kwargs):
+        captured.update(kwargs)
+        return "archive/pending/test.jsonl"
 
-    monkeypatch.setattr(main, "save_to_archive", fake_save_to_archive)
+    monkeypatch.setattr(main, "save_to_pending", fake_save_to_pending)
 
-    assert main.process_single_entry(make_recent_entry(), "nvidia_korea_blog", None, "fallback")
-    assert captured["data"]["analysis_status"] == "fallback"
-    assert captured["data"]["category"] == "API/인프라"
+    assert not main.process_single_entry(make_recent_entry(), "nvidia_korea_blog", None, "fallback")
+    assert captured["error"] == "missing_ai_client"
     assert captured["image_url"] == "https://example.com/image.png"
     assert captured["source_name"] == "nvidia_korea_blog"
 
@@ -270,7 +246,7 @@ def test_select_ai_client_prefers_groq_free_provider(monkeypatch):
     provider, model, client, skipped = main.select_ai_client()
 
     assert provider == "groq"
-    assert model == "llama-3.3-70b-versatile"
+    assert model == "qwen/qwen3.8-27b"
     assert client["provider"] == "groq"
     assert client["api_key"] == "groq-key"
     assert skipped == []
@@ -281,27 +257,12 @@ def test_runtime_analysis_chain_is_groq_only(monkeypatch):
 
     monkeypatch.setattr(main, "AI_PROVIDER", "groq")
     monkeypatch.setattr(main, "AI_PROVIDER_FALLBACKS", "groq")
-    primary = {"_provider_name": "groq", "model": "llama-3.3-70b-versatile"}
+    primary = {"_provider_name": "groq", "model": "qwen/qwen3.8-27b"}
 
     attempts = list(main.iter_analysis_clients(primary, primary["model"]))
 
     assert len(attempts) == 1
-    assert attempts[0] == ("groq", "llama-3.3-70b-versatile", primary)
-
-
-def test_arxiv_fallback_prefers_rss_abstract_over_page_boilerplate():
-    """arXiv fallback은 arXivLabs 안내문이 아니라 RSS 초록을 저장해야 함."""
-
-    content = main.build_fallback_content(
-        {"title": "Paper", "description": "RSS abstract"},
-        "arxiv_ai",
-        "RSS abstract with actual research details",
-        "arXivLabs is a framework that allows collaborators to develop features.",
-        "ai_failed",
-    )
-
-    assert content["summary"] == "RSS abstract with actual research details"
-    assert "arXivLabs" not in content["summary"]
+    assert attempts[0] == ("groq", "qwen/qwen3.8-27b", primary)
 
 
 def test_process_single_entry_blocks_ungrounded_claims(monkeypatch):
@@ -348,14 +309,14 @@ def test_run_pipeline_fails_when_api_key_missing(monkeypatch, tmp_path):
     )
 
 
-def test_run_pipeline_can_archive_fallback_when_api_key_missing(monkeypatch, tmp_path):
-    """Fallback archive가 켜져 있으면 API 키 문제도 수집 자체를 끊지 않아야 함."""
+def test_run_pipeline_can_queue_pending_when_api_key_missing(monkeypatch, tmp_path):
+    """Pending 대기열이 켜져 있으면 API 키 문제에도 원자료를 보관해야 함."""
 
     summary_path = tmp_path / "last_run.json"
     calls = {}
 
     monkeypatch.setattr(main, "LAST_RUN_SUMMARY_PATH", summary_path)
-    monkeypatch.setattr(main, "ENABLE_FALLBACK_ARCHIVE", True)
+    monkeypatch.setattr(main, "ENABLE_PENDING_ARCHIVE", True)
     monkeypatch.setattr(main, "REQUIRE_DAILY_ARTICLE", True)
     monkeypatch.setattr(main, "get_api_key", lambda provider=None: None)
     monkeypatch.setattr(main, "DEFAULT_RSS_SOURCES", {"openai": "https://example.com/rss"})
@@ -375,9 +336,9 @@ def test_run_pipeline_can_archive_fallback_when_api_key_missing(monkeypatch, tmp
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
     assert summary["status"] == "success"
     assert summary["total_articles"] == 1
-    assert summary["fallback_archive_enabled"] is True
+    assert summary["pending_archive_enabled"] is True
     assert summary["ai_provider"] == "groq"
-    assert summary["stats"]["no_ai_provider_fallback"] == 1
+    assert summary["stats"]["no_ai_provider_pending"] == 1
 
 
 def test_run_pipeline_can_fail_when_no_articles_required(monkeypatch, tmp_path):

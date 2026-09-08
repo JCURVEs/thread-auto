@@ -301,6 +301,8 @@ pip install -r requirements.txt
 
 기본 AI 분석 provider는 Groq 무료 티어입니다.
 GitHub Actions 자동화는 Groq만 사용하며 다른 유료 라우트로 자동 전환하지 않습니다.
+기본 모델은 Groq 무료 플랜에서 제공되는 `qwen/qwen3.8-27b`입니다.
+AI 분석이 실패한 원문은 영문 요약으로 공개 아카이브에 넣지 않고 `archive/pending/`에 JSONL로 보관합니다.
 
 ```bash
 set GROQ_API_KEY=your_key
@@ -314,9 +316,10 @@ set AI_PROVIDER=groq
 set AI_PROVIDER_FALLBACKS=groq
 set AI_MODEL=
 set GROQ_API_KEY=
+set GROQ_MODEL=qwen/qwen3.8-27b
 set MAX_ARTICLE_AGE_HOURS=48
 set ENTRIES_PER_SOURCE=5
-set ENABLE_FALLBACK_ARCHIVE=true
+set ENABLE_PENDING_ARCHIVE=true
 set ALLOW_PAID_MODELS=false
 ```
 

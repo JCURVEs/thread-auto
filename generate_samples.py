@@ -21,7 +21,7 @@ save_to_archive(
     "https://techcrunch.com/2026/01/20/everstone-combines-wingify-ab-tasty-for-100m-digital-experience-optimization-platform/",
     "Everstone combines Wingify, AB Tasty",
     "groq",
-    "llama-3.3-70b-versatile"
+    "qwen/qwen3.8-27b"
 )
 
 # Real News 2: DeepSeek-V3 Release
@@ -39,7 +39,7 @@ save_to_archive(
     "https://github.com/deepseek-ai/DeepSeek-V3",
     "DeepSeek-V3 Release",
     "groq",
-    "llama-3.3-70b-versatile"
+    "qwen/qwen3.8-27b"
 )
 
 # Real News 3: OpenAI Operator (Based on leaks/rumors for demo context)
