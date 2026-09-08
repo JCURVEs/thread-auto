@@ -41,7 +41,7 @@ jobs:
       env:
         # AI Provider 설정 (기본: Groq 무료 티어)
         AI_PROVIDER: ${{ github.event.inputs.ai_provider || 'groq' }}
-        AI_PROVIDER_FALLBACKS: ${{ vars.AI_PROVIDER_FALLBACKS || 'groq,gemini,openrouter' }}
+        AI_PROVIDER_FALLBACKS: ${{ vars.AI_PROVIDER_FALLBACKS || 'groq,openrouter' }}
         ALLOW_PAID_MODELS: 'false'
         AI_MODEL: ${{ vars.AI_MODEL || '' }}
         OPENROUTER_MODEL: ${{ vars.OPENROUTER_MODEL || 'qwen/qwen3-30b-a3b:free' }}

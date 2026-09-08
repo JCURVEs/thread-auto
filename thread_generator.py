@@ -107,8 +107,8 @@ class ThreadGenerator:
 
         candidate = self.select_news_candidate(items)
         if not candidate:
-            print(f"[ERROR] 중요도 {THREAD_MIN_IMPORTANCE}점 이상 기술 뉴스가 없습니다.")
-            return 1
+            print(f"[SKIP] 중요도 {THREAD_MIN_IMPORTANCE}점 이상의 검증된 기술 뉴스가 없습니다.")
+            return 0
 
         output_dir = self.write_news_thread(candidate, archive_file)
 

@@ -3,8 +3,9 @@ AI analyzer prompt construction tests.
 """
 
 import json
+import pytest
 
-from ai_analyzer import generate_thread_content
+from ai_analyzer import AIAnalysisError, generate_thread_content
 
 
 class FakeMessage:
@@ -86,3 +87,24 @@ def test_generate_thread_content_omits_article_body_when_missing():
 
     assert "RSS 요약: 짧은 RSS 요약" in user_prompt
     assert "[기사 본문]" not in user_prompt
+
+
+def test_generate_thread_content_preserves_provider_failure_details():
+    """Provider 오류를 None으로 덮지 말고 재시도 내역을 전달해야 함."""
+
+    class FailingCompletions:
+        def create(self, **kwargs):
+            raise RuntimeError("model route unavailable")
+
+    class FailingClient:
+        def __init__(self):
+            self.chat = type("Chat", (), {"completions": FailingCompletions()})()
+
+    client = {"type": "openai", "client": FailingClient(), "model": "retired-model"}
+
+    with pytest.raises(AIAnalysisError) as exc_info:
+        generate_thread_content(client, "제목", "요약", max_retries=2)
+
+    assert exc_info.value.reason == "provider_attempts_exhausted"
+    assert len(exc_info.value.details) == 2
+    assert all("model route unavailable" in detail for detail in exc_info.value.details)

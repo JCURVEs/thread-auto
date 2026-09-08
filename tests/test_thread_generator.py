@@ -255,8 +255,8 @@ def test_generic_story_slide_title_is_rejected(tmp_path):
         raise AssertionError("generic subtitle should be rejected")
 
 
-def test_generate_news_thread_returns_failure_without_candidate(tmp_path):
-    """후보가 없으면 파일을 만들지 않고 실패 코드를 반환해야 함."""
+def test_generate_news_thread_skips_without_candidate(tmp_path):
+    """후보가 없으면 파일을 만들지 않고 정상적으로 건너뛰어야 함."""
 
     archive = """# Daily AI Tech News (2026-07-10)
 
@@ -277,5 +277,5 @@ def test_generate_news_thread_returns_failure_without_candidate(tmp_path):
 
     result = generator.generate_news_thread("2026-07-10")
 
-    assert result == 1
+    assert result == 0
     assert not (tmp_path / "threads").exists()

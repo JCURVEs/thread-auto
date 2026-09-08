@@ -112,6 +112,17 @@ PROVIDERS = {
 DEFAULT_PROVIDER = "groq"
 
 
+class AIAnalysisError(RuntimeError):
+    """Raised when every retry for one AI provider fails."""
+
+    def __init__(self, reason: str, details: Optional[List[str]] = None):
+        self.reason = reason
+        self.details = details or []
+        detail_text = " | ".join(self.details)
+        message = f"{reason}: {detail_text}" if detail_text else reason
+        super().__init__(message)
+
+
 def create_client(api_key: str, provider: str = None, model: str = None):
     """Create AI client."""
     provider = provider or DEFAULT_PROVIDER
@@ -212,6 +223,8 @@ def generate_thread_content(
     위 뉴스를 'Tech Newsletter Curator'의 관점에서 분석하여 **순수 한국어로만** JSON을 작성해줘.
     """
 
+    attempt_errors = []
+
     for attempt in range(max_retries):
         try:
             content = None
@@ -263,19 +276,20 @@ def generate_thread_content(
                 is_valid, error_msg = validate_korean_content(content)
                 if not is_valid:
                     print(f"⚠️ 외국어 감지 ({error_msg}) - 재시도 {attempt + 1}/{max_retries}")
-                    if attempt < max_retries - 1:
-                        continue  # Retry
-                    print("❌ 최대 재시도 초과 - 오염된 응답 폐기")
-                    return None
+                    attempt_errors.append(f"foreign_text:{error_msg}")
+                    continue
+
+            if not content:
+                attempt_errors.append("empty_content")
+                continue
 
             return content
 
         except Exception as e:
             print(f"❌ AI 분석 에러 (시도 {attempt + 1}/{max_retries}): {e}")
-            if attempt == max_retries - 1:
-                return None
+            attempt_errors.append(f"{type(e).__name__}:{e}")
 
-    return None
+    raise AIAnalysisError("provider_attempts_exhausted", attempt_errors)
 
 
 BUSINESS_KEYWORDS = (

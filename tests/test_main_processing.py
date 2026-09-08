@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import json
 
 import main
+from ai_analyzer import AIAnalysisError
 
 
 def make_recent_entry():
@@ -340,6 +341,66 @@ def test_select_ai_client_allows_openrouter_free_model(monkeypatch):
     assert model == "qwen/qwen3-30b-a3b:free"
     assert client["provider"] == "openrouter"
     assert skipped == []
+
+
+def test_process_single_entry_uses_runtime_free_provider_fallback(monkeypatch):
+    """Groq 요청 실패 시 기사 단위로 OpenRouter 무료 모델을 시도해야 함."""
+
+    captured = {}
+    main.PROCESS_STATS.clear()
+    main.PROVIDER_SELECTION_LOG = []
+    monkeypatch.setattr(main, "AI_PROVIDER", "groq")
+    monkeypatch.setattr(main, "AI_PROVIDER_FALLBACKS", "groq,openrouter")
+    monkeypatch.setattr(main, "AI_MODEL", None)
+    monkeypatch.setattr(main, "ALLOW_PAID_MODELS", False)
+    monkeypatch.delenv("OPENROUTER_MODEL", raising=False)
+    monkeypatch.setattr(main, "is_duplicate", lambda url: False)
+    monkeypatch.setattr(main, "get_article_image", lambda url: None)
+    monkeypatch.setattr(main, "fetch_article_content", lambda url: "짧음")
+    monkeypatch.setattr(main, "get_api_key", lambda provider=None: f"{provider}-key")
+    monkeypatch.setattr(
+        main,
+        "create_client",
+        lambda api_key, provider, model: {
+            "_provider_name": provider,
+            "model": model,
+        },
+    )
+
+    def fake_generate(client, title, description, article_content=""):
+        if client["_provider_name"] == "groq":
+            raise AIAnalysisError("provider_attempts_exhausted", ["RuntimeError:route unavailable"])
+        return make_valid_content()
+
+    def fake_save(data, image_url, source_url, original_title, provider, model, source_name, **kwargs):
+        captured["provider"] = provider
+        captured["model"] = model
+        return "archive/test.md"
+
+    monkeypatch.setattr(main, "generate_thread_content", fake_generate)
+    monkeypatch.setattr(main, "save_to_archive", fake_save)
+
+    primary = {"_provider_name": "groq", "model": "llama-3.3-70b-versatile"}
+    assert main.process_single_entry(make_recent_entry(), "openai", primary, primary["model"])
+    assert captured["provider"] == "openrouter"
+    assert captured["model"].endswith(":free")
+    assert main.PROCESS_STATS["ai_exception_groq"] == 1
+    assert main.PROCESS_STATS["provider_fallback_success_openrouter"] == 1
+
+
+def test_arxiv_fallback_prefers_rss_abstract_over_page_boilerplate():
+    """arXiv fallback은 arXivLabs 안내문이 아니라 RSS 초록을 저장해야 함."""
+
+    content = main.build_fallback_content(
+        {"title": "Paper", "description": "RSS abstract"},
+        "arxiv_ai",
+        "RSS abstract with actual research details",
+        "arXivLabs is a framework that allows collaborators to develop features.",
+        "ai_failed",
+    )
+
+    assert content["summary"] == "RSS abstract with actual research details"
+    assert "arXivLabs" not in content["summary"]
 
 
 def test_process_single_entry_blocks_ungrounded_claims(monkeypatch):

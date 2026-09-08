@@ -37,6 +37,7 @@ from rss_collector import (
 )
 from image_extractor import get_article_image
 from ai_analyzer import (
+    AIAnalysisError,
     create_client,
     generate_thread_content,
     calibrate_importance,
@@ -55,7 +56,7 @@ from source_registry import calculate_collection_score, get_disabled_sources
 # --- Configuration ---
 AI_PROVIDER = os.environ.get("AI_PROVIDER", DEFAULT_PROVIDER)
 AI_MODEL = os.environ.get("AI_MODEL", None)  # None = 제공자 기본 모델 사용
-AI_PROVIDER_FALLBACKS = os.environ.get("AI_PROVIDER_FALLBACKS", "groq,gemini,openrouter")
+AI_PROVIDER_FALLBACKS = os.environ.get("AI_PROVIDER_FALLBACKS", "groq,openrouter")
 ALLOW_PAID_MODELS = os.environ.get("ALLOW_PAID_MODELS", "False").lower() in ("true", "1", "yes")
 THREADS_ACCESS_TOKEN = os.environ.get("THREADS_ACCESS_TOKEN")
 RSS_URL = os.environ.get("RSS_URL", None)  # If None, use all sources
@@ -67,6 +68,7 @@ LAST_RUN_SUMMARY_PATH = Path(__file__).resolve().parent / ".thread_auto_last_run
 PROCESS_STATS = Counter()
 ACTIVE_AI_PROVIDER = AI_PROVIDER
 PROVIDER_SELECTION_LOG = []
+FREE_ONLY_PROVIDERS = {"groq", "openrouter"}
 
 
 def get_api_key(provider: Optional[str] = None) -> Optional[str]:
@@ -116,6 +118,9 @@ def blocks_paid_model(provider: str, model: str) -> bool:
     if ALLOW_PAID_MODELS:
         return False
 
+    if provider not in FREE_ONLY_PROVIDERS:
+        return True
+
     if provider == "openrouter":
         return not model.endswith(":free")
 
@@ -147,6 +152,8 @@ def select_ai_client() -> tuple[str, str, Optional[dict], list[str]]:
 
         try:
             client = create_client(api_key, provider, model)
+            if isinstance(client, dict):
+                client["_provider_name"] = provider
             return provider, model, client, skipped
         except Exception as e:
             skipped.append(f"{provider}:client_create_failed:{compact_error(e)}")
@@ -216,6 +223,144 @@ def compact_error(text: str, max_len: int = 80) -> str:
     return compact[:max_len] or "unknown"
 
 
+def _record_provider_skip(message: str) -> None:
+    """Add one provider decision to the run summary without duplicates."""
+    if message not in PROVIDER_SELECTION_LOG:
+        PROVIDER_SELECTION_LOG.append(message)
+
+
+def iter_analysis_clients(client: dict, model: str):
+    """Yield the primary client, then configured zero-cost runtime fallbacks."""
+    primary_provider = client.get("_provider_name") if isinstance(client, dict) else None
+    yield primary_provider or ACTIVE_AI_PROVIDER, model, client
+
+    # Direct callers and unit tests can pass a plain client without enabling
+    # environment-driven provider fallback.
+    if not primary_provider:
+        return
+
+    for provider in get_provider_chain(AI_PROVIDER, AI_PROVIDER_FALLBACKS):
+        if provider == primary_provider:
+            continue
+
+        config = PROVIDERS.get(provider)
+        if not config:
+            message = f"{provider}:unknown_provider"
+            _record_provider_skip(message)
+            record_pipeline_stat(f"provider_unknown_{provider}")
+            continue
+
+        fallback_model = get_model_for_provider(provider)
+        if blocks_paid_model(provider, fallback_model):
+            message = f"{provider}:paid_route_blocked:{fallback_model}"
+            _record_provider_skip(message)
+            record_pipeline_stat(f"provider_paid_model_blocked_{provider}")
+            continue
+
+        api_key = get_api_key(provider)
+        if not api_key:
+            message = f"{provider}:missing_api_key:{config['env_key']}"
+            _record_provider_skip(message)
+            record_pipeline_stat(f"provider_missing_key_{provider}")
+            continue
+
+        try:
+            fallback_client = create_client(api_key, provider, fallback_model)
+            if isinstance(fallback_client, dict):
+                fallback_client["_provider_name"] = provider
+            yield provider, fallback_model, fallback_client
+        except Exception as e:
+            message = f"{provider}:client_create_failed:{compact_error(e)}"
+            _record_provider_skip(message)
+            record_pipeline_stat(f"provider_client_failed_{provider}")
+
+
+def analyze_article_with_fallback(
+    client: dict,
+    model: str,
+    info: dict,
+    source_name: str,
+    article_content: str,
+):
+    """Analyze one article and validate each provider before accepting it."""
+    failures = []
+    primary_provider = client.get("_provider_name") if isinstance(client, dict) else ACTIVE_AI_PROVIDER
+
+    for provider, provider_model, provider_client in iter_analysis_clients(client, model):
+        print(f"  🤖 AI 분석 중... ({provider}/{provider_model})")
+        try:
+            content = generate_thread_content(
+                provider_client,
+                info["title"],
+                info["description"],
+                article_content,
+            )
+        except AIAnalysisError as e:
+            detail = compact_error(e, max_len=180)
+            failures.append(f"{provider}:generation_failed:{detail}")
+            record_pipeline_stat("ai_exception")
+            record_pipeline_stat(f"ai_exception_{provider}")
+            print(f"  ❌ {provider} 분석 실패: {detail}")
+            continue
+        except Exception as e:
+            detail = compact_error(e, max_len=180)
+            failures.append(f"{provider}:unexpected_error:{detail}")
+            record_pipeline_stat("ai_exception")
+            record_pipeline_stat(f"ai_exception_{provider}")
+            print(f"  ❌ {provider} 예상치 못한 분석 실패: {detail}")
+            continue
+
+        if not content or not validate_content(content):
+            missing = [
+                key for key in ("title", "summary", "easy_explainer", "category", "importance")
+                if not content or key not in content
+            ]
+            detail = "missing_fields:" + ",".join(missing)
+            failures.append(f"{provider}:invalid_content:{detail}")
+            record_pipeline_stat("ai_invalid_content")
+            record_pipeline_stat(f"ai_invalid_content_{provider}")
+            print(f"  ❌ {provider} AI 응답 필드 누락: {', '.join(missing)}")
+            continue
+
+        content = calibrate_importance(
+            content,
+            source_name=source_name,
+            original_title=info["title"],
+            original_summary=info["description"],
+            article_content=article_content,
+        )
+
+        is_quality_valid, quality_errors = validate_quality_gate(content)
+        if not is_quality_valid:
+            detail = compact_error(", ".join(quality_errors), max_len=180)
+            failures.append(f"{provider}:quality_gate_failed:{detail}")
+            record_pipeline_stat("quality_gate_failed")
+            record_pipeline_stat(f"quality_gate_failed_{provider}")
+            print(f"  ❌ {provider} 품질 게이트 실패: {detail}")
+            continue
+
+        is_grounded, grounding_errors = validate_factual_grounding(
+            content,
+            original_title=info["title"],
+            original_summary=info["description"],
+            article_content=article_content,
+        )
+        if not is_grounded:
+            detail = compact_error(", ".join(grounding_errors), max_len=180)
+            failures.append(f"{provider}:grounding_failed:{detail}")
+            record_pipeline_stat("grounding_failed")
+            record_pipeline_stat(f"grounding_failed_{provider}")
+            print(f"  ❌ {provider} 근거 검증 실패: {detail}")
+            continue
+
+        if provider != primary_provider:
+            record_pipeline_stat(f"provider_fallback_success_{provider}")
+            print(f"  ✅ 무료 fallback 성공: {provider}")
+        return content, provider, provider_model, failures
+
+    return None, primary_provider, model, failures
+
+
 def clean_fallback_text(text: str, max_len: int = 420) -> str:
     """Clean RSS or scraped text enough to store as source-grounded fallback."""
     if not text:
@@ -272,6 +417,29 @@ def infer_fallback_importance(source_name: str, title: str, text: str) -> int:
     return min(7, max(4, importance))
 
 
+def choose_fallback_source_text(
+    source_name: str,
+    original_summary: str,
+    article_content: str,
+    description: str = "",
+) -> str:
+    """Choose source-grounded text while avoiding known scraper boilerplate."""
+    rss_text = original_summary or description
+    article_lower = (article_content or "").lower()
+    boilerplate_markers = (
+        "arxivlabs is a framework",
+        "collaborators to develop and share new arxiv features",
+        "enable javascript and cookies to continue",
+        "checking your browser before accessing",
+    )
+
+    if source_name.lower().startswith("arxiv") and rss_text:
+        return rss_text
+    if rss_text and any(marker in article_lower for marker in boilerplate_markers):
+        return rss_text
+    return article_content or rss_text
+
+
 def build_fallback_content(
     info: dict,
     source_name: str,
@@ -280,7 +448,12 @@ def build_fallback_content(
     failure_reason: str,
 ) -> dict:
     """Build source-grounded archive content when AI analysis cannot be trusted."""
-    source_text = article_content or original_summary or info.get("description", "")
+    source_text = choose_fallback_source_text(
+        source_name,
+        original_summary,
+        article_content,
+        info.get("description", ""),
+    )
     title = clean_fallback_text(info.get("title", "제목 없음"), max_len=120)
     summary = clean_fallback_text(source_text, max_len=420) or title
     category = infer_fallback_category(source_name, title, summary)
@@ -418,82 +591,29 @@ def process_single_entry(entry: dict, source_name: str, client: Optional[dict], 
             "missing_ai_client",
         )
 
-    print(f"  🤖 AI 분석 중...")
-    try:
-        content = generate_thread_content(
-            client,
-            info["title"],
-            info["description"],
-            analysis_input
-        )
-    except Exception as e:
-        print(f"  ❌ AI 분석 실패: {e}")
-        reason = f"ai_exception:{compact_error(e)}"
-        record_pipeline_stat("ai_exception")
-        return save_fallback_archive(
-            info,
-            source_name,
-            image_url,
-            model,
-            info["description"],
-            analysis_input,
-            article_content_used,
-            reason,
-        )
-
-    if not content or not validate_content(content):
-        print("  ❌ AI 분석 결과가 유효하지 않습니다.")
-        record_pipeline_stat("ai_invalid_content")
-        return save_fallback_archive(
-            info,
-            source_name,
-            image_url,
-            model,
-            info["description"],
-            analysis_input,
-            article_content_used,
-            "ai_invalid_content",
-        )
-
-    content = calibrate_importance(
-        content,
-        source_name=source_name,
-        original_title=info["title"],
-        original_summary=info["description"],
-        article_content=analysis_input
+    content, used_provider, used_model, analysis_failures = analyze_article_with_fallback(
+        client,
+        model,
+        info,
+        source_name,
+        analysis_input,
     )
-
-    is_quality_valid, quality_errors = validate_quality_gate(content)
-    if not is_quality_valid:
-        print(f"  ❌ 품질 게이트 실패: {', '.join(quality_errors)}")
-        reason = f"quality_gate_failed:{compact_error(', '.join(quality_errors))}"
-        record_pipeline_stat("quality_gate_failed")
+    if content is None:
+        record_pipeline_stat("all_ai_providers_failed")
+        if len(analysis_failures) == 1:
+            _, _, provider_reason = analysis_failures[0].partition(":")
+            reason = compact_error(provider_reason, max_len=300)
+        else:
+            reason = "all_providers_failed:" + compact_error(
+                " | ".join(analysis_failures),
+                max_len=300,
+            )
+        print(f"  ❌ 사용 가능한 무료 AI 분석 모두 실패: {reason}")
         return save_fallback_archive(
             info,
             source_name,
             image_url,
-            model,
-            info["description"],
-            analysis_input,
-            article_content_used,
-            reason,
-        )
-
-    is_grounded, grounding_errors = validate_factual_grounding(
-        content,
-        original_title=info["title"],
-        original_summary=info["description"],
-        article_content=analysis_input,
-    )
-    if not is_grounded:
-        print(f"  ❌ 근거 검증 실패: {', '.join(grounding_errors)}")
-        reason = f"grounding_failed:{compact_error(', '.join(grounding_errors))}"
-        record_pipeline_stat("grounding_failed")
-        return save_fallback_archive(
-            info,
-            source_name,
-            image_url,
-            model,
+            used_model,
             info["description"],
             analysis_input,
             article_content_used,
@@ -517,8 +637,8 @@ def process_single_entry(entry: dict, source_name: str, client: Optional[dict], 
             image_url,
             info["link"],
             info["title"],
-            ACTIVE_AI_PROVIDER,
-            model,
+            used_provider,
+            used_model,
             source_name,  # Pass company name
             original_summary=info["description"],
             article_content_used=article_content_used
