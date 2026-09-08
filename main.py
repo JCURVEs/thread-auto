@@ -526,6 +526,19 @@ def is_usable_article_content(article_content: str) -> bool:
     return len(article_content.strip()) >= 200
 
 
+def daily_archive_exists(now: Optional[datetime] = None) -> bool:
+    """Return whether an archive for the runner's current date already exists."""
+    current = now or datetime.now()
+    archive_path = (
+        Path(__file__).resolve().parent
+        / "archive"
+        / current.strftime("%Y")
+        / current.strftime("%m월")
+        / current.strftime("%Y-%m-%d.md")
+    )
+    return archive_path.is_file() and archive_path.stat().st_size > 0
+
+
 def process_single_entry(entry: dict, source_name: str, client: Optional[dict], model: str) -> bool:
     """
     Process a single RSS entry.
@@ -808,7 +821,11 @@ def run_pipeline() -> int:
         print(f"# ⚠️ 새로 수집된 기사가 없습니다.")
     print("#" * 70 + "\n")
 
-    if total_articles == 0 and REQUIRE_DAILY_ARTICLE:
+    if total_articles == 0 and REQUIRE_DAILY_ARTICLE and daily_archive_exists():
+        record_pipeline_stat("daily_archive_already_exists")
+        print("✅ 오늘 아카이브가 이미 있어 중복 없이 정상 종료합니다.")
+
+    elif total_articles == 0 and REQUIRE_DAILY_ARTICLE:
         error = "no_articles_archived"
         print(f"❌ REQUIRE_DAILY_ARTICLE=true 이지만 새 아카이브가 없습니다: {error}")
         write_pipeline_summary(

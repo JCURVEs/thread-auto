@@ -485,6 +485,7 @@ def test_run_pipeline_can_fail_when_no_articles_required(monkeypatch, tmp_path):
     summary_path = tmp_path / "last_run.json"
     monkeypatch.setattr(main, "LAST_RUN_SUMMARY_PATH", summary_path)
     monkeypatch.setattr(main, "REQUIRE_DAILY_ARTICLE", True)
+    monkeypatch.setattr(main, "daily_archive_exists", lambda: False)
     monkeypatch.setattr(main, "get_api_key", lambda provider=None: "key")
     monkeypatch.setattr(main, "create_client", lambda api_key, provider, model: {})
     monkeypatch.setattr(main, "DEFAULT_RSS_SOURCES", {"openai": "https://example.com/rss"})
@@ -497,3 +498,24 @@ def test_run_pipeline_can_fail_when_no_articles_required(monkeypatch, tmp_path):
     assert summary["status"] == "failed"
     assert summary["total_articles"] == 0
     assert summary["error"] == "no_articles_archived"
+
+
+def test_run_pipeline_succeeds_when_daily_archive_already_exists(monkeypatch, tmp_path):
+    """같은 날 재실행에서 모두 중복이어도 오늘 아카이브가 있으면 정상 종료해야 함."""
+
+    summary_path = tmp_path / "last_run.json"
+    monkeypatch.setattr(main, "LAST_RUN_SUMMARY_PATH", summary_path)
+    monkeypatch.setattr(main, "REQUIRE_DAILY_ARTICLE", True)
+    monkeypatch.setattr(main, "daily_archive_exists", lambda: True)
+    monkeypatch.setattr(main, "get_api_key", lambda provider=None: "key")
+    monkeypatch.setattr(main, "create_client", lambda api_key, provider, model: {})
+    monkeypatch.setattr(main, "DEFAULT_RSS_SOURCES", {"openai": "https://example.com/rss"})
+    monkeypatch.setattr(main, "process_single_source", lambda source_name, rss_url, client, model: 0)
+
+    exit_code = main.run_pipeline()
+
+    assert exit_code == 0
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary["status"] == "success"
+    assert summary["total_articles"] == 0
+    assert summary["stats"]["daily_archive_already_exists"] == 1
