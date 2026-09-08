@@ -300,7 +300,7 @@ pip install -r requirements.txt
 ## 환경 변수
 
 기본 AI 분석 provider는 Groq 무료 티어입니다.
-OpenRouter는 `:free` 모델만 기본 허용하며, 유료 모델은 `ALLOW_PAID_MODELS=true`를 직접 켜지 않는 한 차단됩니다.
+GitHub Actions 자동화는 Groq만 사용하며 다른 유료 라우트로 자동 전환하지 않습니다.
 
 ```bash
 set GROQ_API_KEY=your_key
@@ -311,12 +311,9 @@ set COLLECT_ALL_SOURCES=true
 
 ```bash
 set AI_PROVIDER=groq
-set AI_PROVIDER_FALLBACKS=groq,gemini,openrouter
+set AI_PROVIDER_FALLBACKS=groq
 set AI_MODEL=
-set OPENROUTER_API_KEY=
-set OPENROUTER_MODEL=qwen/qwen3-30b-a3b:free
 set GROQ_API_KEY=
-set GEMINI_API_KEY=
 set MAX_ARTICLE_AGE_HOURS=48
 set ENTRIES_PER_SOURCE=5
 set ENABLE_FALLBACK_ARCHIVE=true

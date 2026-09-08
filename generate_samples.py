@@ -38,8 +38,8 @@ save_to_archive(
     "https://github.com/deepseek-ai/DeepSeek-V3/raw/main/figures/logo.png",
     "https://github.com/deepseek-ai/DeepSeek-V3",
     "DeepSeek-V3 Release",
-    "openrouter",
-    "deepseek-v3"
+    "groq",
+    "llama-3.3-70b-versatile"
 )
 
 # Real News 3: OpenAI Operator (Based on leaks/rumors for demo context)

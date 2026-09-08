@@ -90,7 +90,7 @@ def write_daily_run_log(now: datetime | None = None) -> Path:
     disabled_sources = get_disabled_sources()
     dry_run = os.environ.get("DRY_RUN", "true")
     summary = read_last_run_summary()
-    provider = summary.get("ai_provider", os.environ.get("AI_PROVIDER", "openrouter"))
+    provider = summary.get("ai_provider", os.environ.get("AI_PROVIDER", "groq"))
     preferred_provider = summary.get("preferred_ai_provider", provider)
 
     disabled_text = (

@@ -2,7 +2,7 @@
 AI Analyzer module for Thread-Auto.
 
 This module handles AI-powered analysis using multiple FREE AI providers.
-Supports Groq, OpenRouter, Gemini, and more.
+Uses Groq for zero-cost AI analysis in the automated pipeline.
 """
 
 import json
@@ -85,20 +85,6 @@ PROVIDERS = {
         "env_key": "GROQ_API_KEY",
         "model_env_key": "GROQ_MODEL",
         "free_limit": "14,400 req/day"
-    },
-    "openrouter": {
-        "base_url": "https://openrouter.ai/api/v1",
-        "default_model": "qwen/qwen3-30b-a3b:free",
-        "env_key": "OPENROUTER_API_KEY",
-        "model_env_key": "OPENROUTER_MODEL",
-        "free_limit": "free models only (:free)",
-        "headers": {
-            "HTTP-Referer": "https://github.com/JCURVEs/thread-auto",
-            "X-Title": "thread-auto",
-        },
-        "extra_body": {
-            "reasoning": {"enabled": False},
-        },
     },
     "gemini": {
         "base_url": None,

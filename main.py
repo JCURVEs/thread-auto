@@ -6,7 +6,6 @@ It orchestrates RSS collection, AI analysis, and content formatting.
 
 Supports multiple FREE AI providers:
 - Groq (default, fastest, 14K req/day)
-- OpenRouter (Qwen, 400+ models)
 - Gemini (Google, 1.5K req/day)
 """
 
@@ -56,7 +55,7 @@ from source_registry import calculate_collection_score, get_disabled_sources
 # --- Configuration ---
 AI_PROVIDER = os.environ.get("AI_PROVIDER", DEFAULT_PROVIDER)
 AI_MODEL = os.environ.get("AI_MODEL", None)  # None = 제공자 기본 모델 사용
-AI_PROVIDER_FALLBACKS = os.environ.get("AI_PROVIDER_FALLBACKS", "groq,openrouter")
+AI_PROVIDER_FALLBACKS = os.environ.get("AI_PROVIDER_FALLBACKS", "groq")
 ALLOW_PAID_MODELS = os.environ.get("ALLOW_PAID_MODELS", "False").lower() in ("true", "1", "yes")
 THREADS_ACCESS_TOKEN = os.environ.get("THREADS_ACCESS_TOKEN")
 RSS_URL = os.environ.get("RSS_URL", None)  # If None, use all sources
@@ -68,7 +67,7 @@ LAST_RUN_SUMMARY_PATH = Path(__file__).resolve().parent / ".thread_auto_last_run
 PROCESS_STATS = Counter()
 ACTIVE_AI_PROVIDER = AI_PROVIDER
 PROVIDER_SELECTION_LOG = []
-FREE_ONLY_PROVIDERS = {"groq", "openrouter"}
+FREE_ONLY_PROVIDERS = {"groq"}
 
 
 def get_api_key(provider: Optional[str] = None) -> Optional[str]:
@@ -120,9 +119,6 @@ def blocks_paid_model(provider: str, model: str) -> bool:
 
     if provider not in FREE_ONLY_PROVIDERS:
         return True
-
-    if provider == "openrouter":
-        return not model.endswith(":free")
 
     return False
 

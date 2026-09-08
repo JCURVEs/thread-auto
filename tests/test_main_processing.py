@@ -6,7 +6,6 @@ from datetime import datetime, timezone
 import json
 
 import main
-from ai_analyzer import AIAnalysisError
 
 
 def make_recent_entry():
@@ -250,7 +249,7 @@ def test_select_ai_client_prefers_groq_free_provider(monkeypatch):
 
     main.PROCESS_STATS.clear()
     monkeypatch.setattr(main, "AI_PROVIDER", "groq")
-    monkeypatch.setattr(main, "AI_PROVIDER_FALLBACKS", "groq,gemini,openrouter")
+    monkeypatch.setattr(main, "AI_PROVIDER_FALLBACKS", "groq")
     monkeypatch.setattr(main, "AI_MODEL", None)
     monkeypatch.delenv("GROQ_MODEL", raising=False)
     monkeypatch.setattr(
@@ -277,115 +276,17 @@ def test_select_ai_client_prefers_groq_free_provider(monkeypatch):
     assert skipped == []
 
 
-def test_select_ai_client_blocks_paid_openrouter_model_by_default(monkeypatch):
-    """OpenRouter 유료 모델은 명시 허용 전에는 호출하지 않아야 함."""
+def test_runtime_analysis_chain_is_groq_only(monkeypatch):
+    """자동화는 다른 provider로 우회하지 않고 Groq만 사용해야 함."""
 
-    main.PROCESS_STATS.clear()
-    monkeypatch.setattr(main, "AI_PROVIDER", "openrouter")
-    monkeypatch.setattr(main, "AI_PROVIDER_FALLBACKS", "openrouter,groq,gemini")
-    monkeypatch.setattr(main, "AI_MODEL", None)
-    monkeypatch.setattr(main, "ALLOW_PAID_MODELS", False)
-    monkeypatch.setenv("OPENROUTER_MODEL", "qwen/qwen3.8-flash")
-    monkeypatch.delenv("GROQ_MODEL", raising=False)
-    monkeypatch.setattr(
-        main,
-        "get_api_key",
-        lambda provider=None: f"{provider}-key",
-    )
-    monkeypatch.setattr(
-        main,
-        "create_client",
-        lambda api_key, provider, model: {
-            "api_key": api_key,
-            "provider": provider,
-            "model": model,
-        },
-    )
-
-    provider, model, client, skipped = main.select_ai_client()
-
-    assert provider == "groq"
-    assert model == "llama-3.3-70b-versatile"
-    assert client["provider"] == "groq"
-    assert any(item == "openrouter:paid_model_blocked:qwen/qwen3.8-flash" for item in skipped)
-    assert main.PROCESS_STATS["provider_paid_model_blocked_openrouter"] == 1
-
-
-def test_select_ai_client_allows_openrouter_free_model(monkeypatch):
-    """OpenRouter를 쓰더라도 :free 모델이면 허용해야 함."""
-
-    main.PROCESS_STATS.clear()
-    monkeypatch.setattr(main, "AI_PROVIDER", "openrouter")
-    monkeypatch.setattr(main, "AI_PROVIDER_FALLBACKS", "openrouter,groq,gemini")
-    monkeypatch.setattr(main, "AI_MODEL", None)
-    monkeypatch.setattr(main, "ALLOW_PAID_MODELS", False)
-    monkeypatch.setenv("OPENROUTER_MODEL", "qwen/qwen3-30b-a3b:free")
-    monkeypatch.setattr(
-        main,
-        "get_api_key",
-        lambda provider=None: "openrouter-key" if provider == "openrouter" else None,
-    )
-    monkeypatch.setattr(
-        main,
-        "create_client",
-        lambda api_key, provider, model: {
-            "api_key": api_key,
-            "provider": provider,
-            "model": model,
-        },
-    )
-
-    provider, model, client, skipped = main.select_ai_client()
-
-    assert provider == "openrouter"
-    assert model == "qwen/qwen3-30b-a3b:free"
-    assert client["provider"] == "openrouter"
-    assert skipped == []
-
-
-def test_process_single_entry_uses_runtime_free_provider_fallback(monkeypatch):
-    """Groq 요청 실패 시 기사 단위로 OpenRouter 무료 모델을 시도해야 함."""
-
-    captured = {}
-    main.PROCESS_STATS.clear()
-    main.PROVIDER_SELECTION_LOG = []
     monkeypatch.setattr(main, "AI_PROVIDER", "groq")
-    monkeypatch.setattr(main, "AI_PROVIDER_FALLBACKS", "groq,openrouter")
-    monkeypatch.setattr(main, "AI_MODEL", None)
-    monkeypatch.setattr(main, "ALLOW_PAID_MODELS", False)
-    monkeypatch.delenv("OPENROUTER_MODEL", raising=False)
-    monkeypatch.setattr(main, "is_duplicate", lambda url: False)
-    monkeypatch.setattr(main, "get_article_image", lambda url: None)
-    monkeypatch.setattr(main, "fetch_article_content", lambda url: "짧음")
-    monkeypatch.setattr(main, "get_api_key", lambda provider=None: f"{provider}-key")
-    monkeypatch.setattr(
-        main,
-        "create_client",
-        lambda api_key, provider, model: {
-            "_provider_name": provider,
-            "model": model,
-        },
-    )
-
-    def fake_generate(client, title, description, article_content=""):
-        if client["_provider_name"] == "groq":
-            raise AIAnalysisError("provider_attempts_exhausted", ["RuntimeError:route unavailable"])
-        return make_valid_content()
-
-    def fake_save(data, image_url, source_url, original_title, provider, model, source_name, **kwargs):
-        captured["provider"] = provider
-        captured["model"] = model
-        return "archive/test.md"
-
-    monkeypatch.setattr(main, "generate_thread_content", fake_generate)
-    monkeypatch.setattr(main, "save_to_archive", fake_save)
-
+    monkeypatch.setattr(main, "AI_PROVIDER_FALLBACKS", "groq")
     primary = {"_provider_name": "groq", "model": "llama-3.3-70b-versatile"}
-    assert main.process_single_entry(make_recent_entry(), "openai", primary, primary["model"])
-    assert captured["provider"] == "openrouter"
-    assert captured["model"].endswith(":free")
-    assert main.PROCESS_STATS["ai_exception_groq"] == 1
-    assert main.PROCESS_STATS["provider_fallback_success_openrouter"] == 1
+
+    attempts = list(main.iter_analysis_clients(primary, primary["model"]))
+
+    assert len(attempts) == 1
+    assert attempts[0] == ("groq", "llama-3.3-70b-versatile", primary)
 
 
 def test_arxiv_fallback_prefers_rss_abstract_over_page_boilerplate():
