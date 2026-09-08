@@ -348,7 +348,6 @@ FORBIDDEN_STYLE_EXPRESSIONS = (
     "정말",
     "매우",
     "엄청",
-    "할 수 있습니다",
     "하게 됩니다",
     "이것은",
 )
@@ -551,7 +550,9 @@ def validate_quality_gate(content: Dict[str, Any]) -> Tuple[bool, List[str]]:
         if expression in text:
             errors.append(f"broken_translation:{expression}")
 
-    attached_word = re.search(r"[가-힣][A-Za-z]{3,}|[A-Za-z]{3,}[가-힣]{2,}", text)
+    # English product names naturally take Korean particles (for example,
+    # "Jetson에서"). Only block a Hangul fragment leaking into an English word.
+    attached_word = re.search(r"[가-힣][A-Za-z]{3,}", text)
     if attached_word:
         errors.append(f"missing_space_near_english:{attached_word.group(0)}")
 
@@ -684,6 +685,77 @@ def _extract_claim_metrics(text: str) -> Set[str]:
     return found
 
 
+def _canonical_claim_metrics(text: str) -> list[tuple[str, str, float]]:
+    """Return metrics as comparable values across English and Korean units."""
+    normalized = text.lower()
+    normalized = normalized.replace(r"\%", "%").replace(r"\times", "x")
+    normalized = normalized.replace("{", "").replace("}", "").replace("$", "")
+    normalized = re.sub(r"\bpercent(?:age)?\b", "%", normalized)
+
+    number = r"\d+(?:,\d{3})*(?:\.\d+)?"
+    unit_factors = {
+        "k": 1_000,
+        "thousand": 1_000,
+        "만": 10_000,
+        "m": 1_000_000,
+        "million": 1_000_000,
+        "억": 100_000_000,
+        "b": 1_000_000_000,
+        "billion": 1_000_000_000,
+        "조": 1_000_000_000_000,
+        "t": 1_000_000_000_000,
+        "trillion": 1_000_000_000_000,
+    }
+    metrics = []
+    occupied = []
+    pattern = re.compile(
+        rf"(?P<number>{number})\s*(?P<unit>tokens/s|tok/s|auroc|fps|ms|gb|tb|%|배|x|"
+        rf"thousand|million|billion|trillion|만|억|조|k|m|b|t)"
+        rf"(?![A-Za-z가-힣])",
+        re.IGNORECASE,
+    )
+    for match in pattern.finditer(normalized):
+        raw = re.sub(r"\s+", "", match.group(0))
+        value = float(match.group("number").replace(",", ""))
+        unit = match.group("unit").lower()
+        occupied.append(match.span())
+        if unit == "%":
+            metrics.append((raw, "percent", value))
+        elif unit in {"x", "배"}:
+            metrics.append((raw, "multiplier", value))
+        elif unit in unit_factors:
+            metrics.append((raw, "count", value * unit_factors[unit]))
+        else:
+            metrics.append((raw, f"unit:{unit}", value))
+
+    # Comma-grouped counts such as 359,240 may be summarized as 35만.
+    for match in re.finditer(rf"\b{number}\b", normalized):
+        if "," not in match.group(0):
+            continue
+        if any(start <= match.start() < end for start, end in occupied):
+            continue
+        raw = match.group(0)
+        metrics.append((raw, "count", float(raw.replace(",", ""))))
+
+    return metrics
+
+
+def _metrics_equivalent(
+    generated_metric: tuple[str, str, float],
+    evidence_metric: tuple[str, str, float],
+) -> bool:
+    """Compare exact rates and allow ordinary rounding of large counts."""
+    _, generated_kind, generated_value = generated_metric
+    _, evidence_kind, evidence_value = evidence_metric
+    if generated_kind != evidence_kind:
+        return False
+    if generated_value == evidence_value:
+        return True
+    if generated_kind == "count" and evidence_value >= 10_000:
+        return abs(generated_value - evidence_value) / evidence_value <= 0.05
+    return False
+
+
 def _extract_versioned_terms(text: str) -> Set[str]:
     """Extract high-risk product/model/version tokens that should appear in evidence."""
     terms = set()
@@ -709,7 +781,6 @@ def validate_factual_grounding(
     made-up value would make the archive misleading.
     """
     evidence = " ".join([original_title, original_summary, article_content]).lower()
-    evidence_compact = re.sub(r"\s+", "", evidence)
     generated = " ".join(
         str(content.get(field, ""))
         for field in ("title", "summary", "easy_explainer")
@@ -717,9 +788,10 @@ def validate_factual_grounding(
 
     errors = []
 
-    for metric in sorted(_extract_claim_metrics(generated)):
-        if metric not in evidence_compact:
-            errors.append(f"ungrounded_metric:{metric}")
+    evidence_metrics = _canonical_claim_metrics(evidence)
+    for metric in _canonical_claim_metrics(generated):
+        if not any(_metrics_equivalent(metric, candidate) for candidate in evidence_metrics):
+            errors.append(f"ungrounded_metric:{metric[0]}")
 
     evidence_terms = _extract_versioned_terms(evidence)
     for term in sorted(_extract_versioned_terms(generated)):

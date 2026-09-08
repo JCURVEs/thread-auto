@@ -39,6 +39,8 @@ SOURCE_KEYS = {
     "arXiv NLP": "arxiv_cl",
 }
 
+MAX_QUALITY_ATTEMPTS = 3
+
 
 def split_archive(text: str) -> tuple[str, list[str]]:
     """Split one daily Markdown archive into its header and entry blocks."""
@@ -132,39 +134,46 @@ def repair_archive(path: Path, client: dict, limit: int = 0) -> dict:
             output_blocks.append(block)
             continue
 
-        try:
-            content = generate_thread_content(
-                client,
-                entry["original_title"],
-                entry["rss_summary"],
-                max_retries=3,
+        content = None
+        errors = []
+        for attempt in range(1, MAX_QUALITY_ATTEMPTS + 1):
+            try:
+                candidate = generate_thread_content(
+                    client,
+                    entry["original_title"],
+                    entry["rss_summary"],
+                    max_retries=3,
+                )
+            except AIAnalysisError as error:
+                errors = [str(error)]
+                continue
+
+            if not validate_content(candidate):
+                errors = ["invalid content"]
+                continue
+
+            candidate = calibrate_importance(
+                candidate,
+                source_name=entry["source_name"],
+                original_title=entry["original_title"],
+                original_summary=entry["rss_summary"],
             )
-        except AIAnalysisError as error:
-            print(f"[FAIL] {entry['current_title']}: {error}")
-            failed += 1
-            output_blocks.append(block)
-            continue
-
-        if not validate_content(content):
-            print(f"[FAIL] {entry['current_title']}: invalid content")
-            failed += 1
-            output_blocks.append(block)
-            continue
-
-        content = calibrate_importance(
-            content,
-            source_name=entry["source_name"],
-            original_title=entry["original_title"],
-            original_summary=entry["rss_summary"],
-        )
-        quality_ok, quality_errors = validate_quality_gate(content)
-        grounded, grounding_errors = validate_factual_grounding(
-            content,
-            original_title=entry["original_title"],
-            original_summary=entry["rss_summary"],
-        )
-        if not quality_ok or not grounded:
+            quality_ok, quality_errors = validate_quality_gate(candidate)
+            grounded, grounding_errors = validate_factual_grounding(
+                candidate,
+                original_title=entry["original_title"],
+                original_summary=entry["rss_summary"],
+            )
             errors = quality_errors + grounding_errors
+            if quality_ok and grounded:
+                content = candidate
+                break
+            print(
+                f"[RETRY {attempt}/{MAX_QUALITY_ATTEMPTS}] "
+                f"{entry['current_title']}: {', '.join(errors)}"
+            )
+
+        if content is None:
             print(f"[FAIL] {entry['current_title']}: {', '.join(errors)}")
             failed += 1
             output_blocks.append(block)
