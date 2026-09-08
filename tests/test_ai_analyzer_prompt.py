@@ -5,7 +5,7 @@ AI analyzer prompt construction tests.
 import json
 import pytest
 
-from ai_analyzer import AIAnalysisError, generate_thread_content
+from ai_analyzer import AIAnalysisError, _normalize_generated_korean, generate_thread_content
 
 
 class FakeMessage:
@@ -108,3 +108,19 @@ def test_generate_thread_content_preserves_provider_failure_details():
     assert exc_info.value.reason == "provider_attempts_exhausted"
     assert len(exc_info.value.details) == 2
     assert all("model route unavailable" in detail for detail in exc_info.value.details)
+
+
+def test_normalize_generated_korean_repairs_known_mixed_words():
+    """반복 확인된 한영 혼합 번역 오류는 저장 전에 교정해야 함."""
+
+    content = {
+        "title": "펙ulative 실행 기법",
+        "summary": "서rogate 모델을 사용합니다.",
+        "easy_explainer": "펙ulative 단계가 먼저 답을 준비합니다.",
+    }
+
+    normalized = _normalize_generated_korean(content)
+
+    assert normalized["title"] == "추측 실행 기법"
+    assert normalized["summary"] == "대리 모델을 사용합니다."
+    assert normalized["easy_explainer"] == "추측 단계가 먼저 답을 준비합니다."

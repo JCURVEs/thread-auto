@@ -226,6 +226,7 @@ def generate_thread_content(
     중국어/일본어 한자, 히라가나, 가타카나, 키릴 문자, 베트남어 단어를 섞어 쓰지 마세요.
     "数学", "品質", "最近", "検証", "提出", "khuyến", "Depends" 같은 깨진 혼합 문자는 절대 쓰지 마세요.
     한국어와 영어 단어가 붙어 있으면 띄어 쓰세요. 예: "최신Foundation" 금지, "최신 Foundation" 허용.
+    speculative은 문맥에 맞게 "추측" 또는 "선행 예측"으로 번역하고 한글과 영문을 섞어 쓰지 마세요.
     "AI 분석 결과를 신뢰하기 어렵다", "확인이 필요하다" 같은 내부 상태 문구를 요약과 쉬운 설명에 쓰지 마세요.
     쉬운 설명은 기술의 핵심을 일상적인 비유나 구체적인 예시로 한 문장에 풀어 쓰세요.
     초능력, 로봇의 반항, 인류 위협 같은 SF식 과장이나 원문에 없는 공포 비유는 쓰지 마세요.
@@ -285,6 +286,9 @@ def generate_thread_content(
                 res = requests.post(f"{client['base_url']}/chat/completions", headers=headers, json=data)
                 content = json.loads(res.json()["choices"][0]["message"]["content"])
 
+            if content:
+                content = _normalize_generated_korean(content)
+
             # Validate Korean content
             if content:
                 is_valid, error_msg = validate_korean_content(content)
@@ -304,6 +308,23 @@ def generate_thread_content(
             attempt_errors.append(f"{type(e).__name__}:{e}")
 
     raise AIAnalysisError("provider_attempts_exhausted", attempt_errors)
+
+
+def _normalize_generated_korean(content: Dict[str, Any]) -> Dict[str, Any]:
+    """Correct a small set of repeatable mixed-script model artifacts."""
+    replacements = (
+        ("펙ulative", "추측"),
+        ("서rogate 모델", "대리 모델"),
+        ("서rogate", "대리 모델"),
+    )
+    for field in ("title", "summary", "easy_explainer"):
+        value = content.get(field)
+        if not isinstance(value, str):
+            continue
+        for broken, corrected in replacements:
+            value = value.replace(broken, corrected)
+        content[field] = value
+    return content
 
 
 BUSINESS_KEYWORDS = (
@@ -691,6 +712,35 @@ def _canonical_claim_metrics(text: str) -> list[tuple[str, str, float]]:
     normalized = normalized.replace(r"\%", "%").replace(r"\times", "x")
     normalized = normalized.replace("{", "").replace("}", "").replace("$", "")
     normalized = re.sub(r"\bpercent(?:age)?\b", "%", normalized)
+
+    number_words = {
+        "one": 1,
+        "two": 2,
+        "three": 3,
+        "four": 4,
+        "five": 5,
+        "six": 6,
+        "seven": 7,
+        "eight": 8,
+        "nine": 9,
+        "ten": 10,
+        "eleven": 11,
+        "twelve": 12,
+        "thirteen": 13,
+        "fourteen": 14,
+        "fifteen": 15,
+        "sixteen": 16,
+        "seventeen": 17,
+        "eighteen": 18,
+        "nineteen": 19,
+        "twenty": 20,
+    }
+    word_pattern = "|".join(number_words)
+    normalized = re.sub(
+        rf"\b({word_pattern})(?=\s+(?:thousand|million|billion|trillion)\b)",
+        lambda match: str(number_words[match.group(1)]),
+        normalized,
+    )
 
     number = r"\d+(?:,\d{3})*(?:\.\d+)?"
     unit_factors = {

@@ -180,3 +180,17 @@ def test_factual_grounding_allows_latex_and_word_percentages():
 
     assert is_valid
     assert errors == []
+
+
+def test_factual_grounding_allows_spelled_english_large_number():
+    """영문으로 적힌 큰 수와 한국어 단위 표기를 같은 값으로 인식해야 함."""
+
+    content = make_content(summary="1,000만 건의 실험으로 결과를 확인했습니다.")
+
+    is_valid, errors = validate_factual_grounding(
+        content,
+        original_summary="The study confirms this over ten million trials.",
+    )
+
+    assert is_valid
+    assert errors == []
