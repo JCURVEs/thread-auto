@@ -8,6 +8,7 @@ Uses Groq for zero-cost AI analysis in the automated pipeline.
 import json
 import os
 import re
+import time
 import unicodedata
 from typing import Dict, Any, Optional, Tuple, List, Set
 
@@ -96,6 +97,8 @@ PROVIDERS = {
 }
 
 DEFAULT_PROVIDER = "groq"
+GROQ_MIN_REQUEST_INTERVAL_SECONDS = float(os.environ.get("GROQ_MIN_REQUEST_INTERVAL_SECONDS", "12"))
+_LAST_GROQ_REQUEST_AT = 0.0
 
 
 class AIAnalysisError(RuntimeError):
@@ -119,9 +122,24 @@ def create_client(api_key: str, provider: str = None, model: str = None):
     model = model or config["default_model"]
 
     if provider == "gemini":
-        return _create_gemini_client(api_key, model)
+        client = _create_gemini_client(api_key, model)
     else:
-        return _create_openai_compatible_client(api_key, config["base_url"], model)
+        client = _create_openai_compatible_client(api_key, config["base_url"], model)
+    client["_provider_name"] = provider
+    return client
+
+
+def _throttle_groq(client: Dict) -> None:
+    """Keep sequential Groq requests within the free-plan output-token window."""
+    global _LAST_GROQ_REQUEST_AT
+    if client.get("_provider_name") != "groq" or GROQ_MIN_REQUEST_INTERVAL_SECONDS <= 0:
+        return
+
+    elapsed = time.monotonic() - _LAST_GROQ_REQUEST_AT
+    remaining = GROQ_MIN_REQUEST_INTERVAL_SECONDS - elapsed
+    if _LAST_GROQ_REQUEST_AT and remaining > 0:
+        time.sleep(remaining)
+    _LAST_GROQ_REQUEST_AT = time.monotonic()
 
 
 def _create_openai_compatible_client(api_key: str, base_url: str, model: str):
@@ -210,6 +228,7 @@ def generate_thread_content(
     한국어와 영어 단어가 붙어 있으면 띄어 쓰세요. 예: "최신Foundation" 금지, "최신 Foundation" 허용.
     "AI 분석 결과를 신뢰하기 어렵다", "확인이 필요하다" 같은 내부 상태 문구를 요약과 쉬운 설명에 쓰지 마세요.
     쉬운 설명은 기술의 핵심을 일상적인 비유나 구체적인 예시로 한 문장에 풀어 쓰세요.
+    초능력, 로봇의 반항, 인류 위협 같은 SF식 과장이나 원문에 없는 공포 비유는 쓰지 마세요.
 
     위 뉴스를 'Tech Newsletter Curator'의 관점에서 분석하여 **순수 한국어로만** JSON을 작성해줘.
     """
@@ -221,6 +240,7 @@ def generate_thread_content(
             content = None
 
             if client["type"] == "openai":
+                _throttle_groq(client)
                 request_kwargs = {
                     "model": client["model"],
                     "messages": [
@@ -229,7 +249,7 @@ def generate_thread_content(
                     ],
                     "response_format": {"type": "json_object"},
                     "temperature": 0.2,
-                    "max_tokens": 1200,
+                    "max_tokens": 450,
                 }
                 if client.get("extra_body"):
                     request_kwargs["extra_body"] = client["extra_body"]
@@ -247,6 +267,7 @@ def generate_thread_content(
 
             elif client["type"] == "requests":
                 import requests
+                _throttle_groq(client)
                 headers = {
                     "Authorization": f"Bearer {client['api_key']}",
                     "Content-Type": "application/json",
@@ -257,7 +278,7 @@ def generate_thread_content(
                     "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": user_prompt}],
                     "response_format": {"type": "json_object"},
                     "temperature": 0.2,
-                    "max_tokens": 1200,
+                    "max_tokens": 450,
                 }
                 if client.get("extra_body"):
                     data.update(client["extra_body"])

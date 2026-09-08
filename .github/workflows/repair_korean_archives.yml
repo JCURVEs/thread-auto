@@ -34,6 +34,7 @@ jobs:
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           GROQ_MODEL: qwen/qwen3.8-27b
+          GROQ_MIN_REQUEST_INTERVAL_SECONDS: '12'
           REPAIR_DATES: ${{ inputs.dates }}
           REPAIR_LIMIT: ${{ inputs.limit }}
         run: python scripts/repair_archive_korean.py --dates "$REPAIR_DATES" --limit "$REPAIR_LIMIT"

@@ -45,6 +45,7 @@ jobs:
         ALLOW_PAID_MODELS: 'false'
         AI_MODEL: ${{ vars.AI_MODEL || '' }}
         GROQ_MODEL: ${{ vars.GROQ_MODEL || 'qwen/qwen3.8-27b' }}
+        GROQ_MIN_REQUEST_INTERVAL_SECONDS: '12'
         GEMINI_MODEL: ${{ vars.GEMINI_MODEL || '' }}
         
         # API Keys (GitHub Secrets에 등록)
