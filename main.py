@@ -17,7 +17,7 @@ from collections import Counter
 from typing import Optional
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from time import mktime
+from article_dates import entry_published_date
 import feedparser
 from dateutil import parser as date_parser
 
@@ -29,6 +29,7 @@ from rss_collector import (
     fetch_feed,
     fetch_feed_or_scrape,
     fetch_article_content,
+    fetch_article_published_date,
     get_latest_entry,
     get_entries,
     get_entry_info,
@@ -173,35 +174,7 @@ def parse_published_date_utc(entry: dict, link: str) -> Optional[datetime]:
     Returns:
         datetime object in UTC, or None if no date found
     """
-    # Try 1: parsed date fields
-    published_date = entry.get("published_parsed") or entry.get("updated_parsed")
-    if published_date:
-        # Convert struct_time to UTC datetime
-        dt = datetime.fromtimestamp(mktime(published_date), tz=timezone.utc)
-        return dt
-
-    # Try 2: string date fields
-    published_str = entry.get("published") or entry.get("updated")
-    if published_str:
-        try:
-            dt = date_parser.parse(published_str)
-            # If no timezone info, assume UTC
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            # Convert to UTC
-            return dt.astimezone(timezone.utc)
-        except Exception:
-            pass
-
-    # Try 3: extract from URL pattern (last resort)
-    url_date_match = re.search(r'/(\d{4})/(\d{1,2})/', link)
-    if url_date_match:
-        year, month = int(url_date_match.group(1)), int(url_date_match.group(2))
-        # Use middle of month for better accuracy
-        day = 15
-        return datetime(year, month, day, tzinfo=timezone.utc)
-
-    return None
+    return entry_published_date(entry, link)
 
 
 # Maximum age for articles to be collected (48 hours covers weekend gaps)
@@ -427,12 +400,37 @@ def process_single_entry(entry: dict, source_name: str, client: Optional[dict], 
     """
     info = get_entry_info(entry)
 
+    if is_duplicate(info["link"]):
+        record_pipeline_stat("skipped_duplicate")
+        return False
+
     # Check 1: Published date (within MAX_ARTICLE_AGE_HOURS, UTC-based)
     published_dt = parse_published_date_utc(entry, info["link"])
+
+    now_utc = datetime.now(timezone.utc)
+    if published_dt and published_dt > now_utc + timedelta(minutes=15):
+        record_pipeline_stat("skipped_future_date")
+        return False
+    if published_dt and now_utc - published_dt > timedelta(hours=MAX_ARTICLE_AGE_HOURS):
+        record_pipeline_stat("skipped_old")
+        return False
+
+    page_date = fetch_article_published_date(info["link"])
+    if page_date:
+        if published_dt and page_date.date() != published_dt.date():
+            record_pipeline_stat("publication_date_conflict")
+        published_dt = min(published_dt, page_date) if published_dt else page_date
+    if page_date and page_date > now_utc + timedelta(minutes=15):
+        record_pipeline_stat("skipped_future_date")
+        return False
 
     if published_dt:
         now_utc = datetime.now(timezone.utc)
         age = now_utc - published_dt
+
+        if age < -timedelta(minutes=15):
+            record_pipeline_stat("skipped_future_date")
+            return False
 
         if age > timedelta(hours=MAX_ARTICLE_AGE_HOURS):
             print(f"  ⏰ 오래된 글 ({age.days}일 {age.seconds//3600}시간 전) - 스킵")
@@ -442,12 +440,6 @@ def process_single_entry(entry: dict, source_name: str, client: Optional[dict], 
         # No date information - skip for safety
         print(f"  ⚠️ 발행일 정보 없음 - 스킵")
         record_pipeline_stat("skipped_missing_date")
-        return False
-
-    # Check 2: Duplicate URL
-    if is_duplicate(info["link"]):
-        print(f"  🔁 이미 수집됨 - 스킵: {info['title'][:40]}")
-        record_pipeline_stat("skipped_duplicate")
         return False
 
     print(f"  ✅ 수집 대상: {info['title'][:60]}")
@@ -525,6 +517,8 @@ def process_single_entry(entry: dict, source_name: str, client: Optional[dict], 
 
     # Step 5: Archive
     try:
+        content["published_at"] = published_dt.isoformat()
+        content["publication_date_source"] = "page+feed" if page_date else "feed_or_url"
         save_to_archive(
             content,
             image_url,

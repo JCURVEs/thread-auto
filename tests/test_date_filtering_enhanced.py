@@ -40,15 +40,13 @@ class TestUTCDateFiltering:
         dt = main.parse_published_date_utc(entry, "https://example.com")
         assert dt.tzinfo == timezone.utc
 
-    def test_url_fallback_uses_mid_month(self):
-        """Test URL fallback uses day 15 instead of day 1"""
+    def test_incomplete_url_date_is_not_invented(self):
+        """A year/month URL is not evidence of an exact publication day."""
         entry = {"published_parsed": None, "published": None}
         link = "https://example.com/blog/2023/5/article"
 
         dt = main.parse_published_date_utc(entry, link)
-        assert dt.day == 15  # Not 1
-        assert dt.month == 5
-        assert dt.year == 2023
+        assert dt is None
 
     def test_24hour_boundary_utc(self):
         """Test 24-hour filter works correctly in UTC"""

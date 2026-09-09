@@ -7,6 +7,7 @@ Handles saving news in the specific 'Newsletter Format' requested by the user.
 import json
 import os
 import glob
+from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 from datetime import datetime
 from typing import Dict, Any, Optional, Set, List
 
@@ -99,12 +100,12 @@ def extract_source_url(line: str) -> Optional[str]:
     return None
 
 
-def get_archived_urls(days: int = 7) -> Set[str]:
+def get_archived_urls(days: Optional[int] = None) -> Set[str]:
     """
-    Get all URLs from recent archive files to prevent duplicates.
+    Get archived URLs across all history by default to prevent resurfacing.
 
     Args:
-        days: Number of recent days to check (default: 7)
+        days: Optional number of recent archive files; None scans all history.
 
     Returns:
         Set of URLs already archived
@@ -115,7 +116,7 @@ def get_archived_urls(days: int = 7) -> Set[str]:
 
     archived_urls = set()
     archive_files = list_archive_files()
-    recent_files = archive_files[:days]
+    recent_files = archive_files if days is None else archive_files[:days]
 
     for filepath in recent_files:
         try:
@@ -163,7 +164,15 @@ def is_duplicate(url: str) -> bool:
         True if URL is already archived, False otherwise
     """
     archived_urls = get_archived_urls()
-    return url in archived_urls or url in get_pending_urls()
+    return canonical_url(url) in {canonical_url(item) for item in archived_urls | get_pending_urls()}
+
+
+def canonical_url(url: str) -> str:
+    """Ignore tracking parameters, fragments and trailing slashes."""
+    parts = urlsplit(url)
+    query = [(key, value) for key, value in parse_qsl(parts.query, keep_blank_values=True)
+             if not key.lower().startswith("utm_") and key.lower() not in {"gclid", "fbclid"}]
+    return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), parts.path.rstrip("/"), urlencode(sorted(query)), ""))
 
 
 def save_to_pending(
@@ -264,6 +273,10 @@ def save_to_archive(
     category = data.get('category', '기타')
     importance = data.get('importance', 5)
     lines.append(f"**분야:** {category} | **중요도:** {importance}점\n\n")
+
+    if data.get("published_at"):
+        lines.append(f"**원문발행일:** {data['published_at']}\n\n")
+        lines.append(f"**수집일:** {archive_date.strftime('%Y-%m-%d')}\n\n")
 
     if data.get("analysis_status"):
         lines.append(f"**분석상태:** {data['analysis_status']}\n\n")

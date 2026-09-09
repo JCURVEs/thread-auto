@@ -4,8 +4,14 @@ Main pipeline processing tests.
 
 from datetime import datetime, timezone
 import json
+import pytest
 
 import main
+
+
+@pytest.fixture(autouse=True)
+def mock_page_dates(monkeypatch):
+    monkeypatch.setattr(main, "fetch_article_published_date", lambda url: None)
 
 
 def make_recent_entry():

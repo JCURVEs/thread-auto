@@ -5,7 +5,7 @@ AI analyzer prompt construction tests.
 import json
 import pytest
 
-from ai_analyzer import AIAnalysisError, _normalize_generated_korean, generate_thread_content
+from ai_analyzer import AIAnalysisError, _clean_prompt_text, _normalize_generated_korean, generate_thread_content
 
 
 class FakeMessage:
@@ -124,3 +124,28 @@ def test_normalize_generated_korean_repairs_known_mixed_words():
     assert normalized["title"] == "추측 실행 기법"
     assert normalized["summary"] == "대리 모델을 사용합니다."
     assert normalized["easy_explainer"] == "추측 단계가 먼저 답을 준비합니다."
+
+
+def test_prompt_cleanup_preserves_metrics_and_deduplicates():
+    raw = '<nav>Navigation</nav><p>Latency fell by 44.9%.</p><p>Latency fell by 44.9%.</p><script>tracking()</script><p>Limited to the Telecom benchmark.</p>'
+    cleaned = _clean_prompt_text(raw, 6000)
+    assert cleaned.count("44.9%") == 1
+    assert "Limited to the Telecom benchmark." in cleaned
+    assert "Navigation" not in cleaned
+    assert "tracking" not in cleaned
+
+
+def test_body_and_rss_are_not_sent_twice():
+    fake_client = FakeClient()
+    generate_thread_content(
+        {"type": "openai", "client": fake_client, "model": "fake"},
+        "기술 기사", "The same source evidence.",
+        "The same source evidence. With additional details.",
+    )
+    prompt = fake_client.chat.completions.last_messages[1]["content"]
+    assert prompt.count("The same source evidence.") == 1
+
+
+def test_prompt_cleanup_keeps_repeated_inline_terms():
+    cleaned = _clean_prompt_text('<p>The <b>same</b> model has the <b>same</b> accuracy.</p>', 100)
+    assert cleaned == "The same model has the same accuracy."

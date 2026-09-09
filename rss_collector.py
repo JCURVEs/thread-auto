@@ -8,7 +8,9 @@ Focused on breakthrough AI tech, new models, and research papers.
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
 from urllib.parse import urljoin
+from functools import lru_cache
 import feedparser
+from article_dates import page_published_date
 
 from source_registry import (
     get_enabled_sources,
@@ -208,7 +210,7 @@ def fetch_listing_page(source_name: str, url: str, limit: int = 15) -> Optional[
                 "link": link,
                 "summary": title,
                 "description": title,
-                "published": datetime.now(timezone.utc).isoformat(),
+                "published": "",
             })
 
         if not entries:
@@ -338,6 +340,24 @@ def get_entry_info(entry: Dict[str, Any]) -> Dict[str, str]:
         "published": entry.get("published", ""),
     }
 
+@lru_cache(maxsize=128)
+def _fetch_article_html(url: str) -> str:
+    """Reuse one HTTP response for date checking and body extraction per run."""
+    import requests
+    response = requests.get(url, headers={"User-Agent": "Thread-Auto/2.0 (+https://github.com/JCURVEs/thread-auto)"}, timeout=15)
+    response.raise_for_status()
+    return response.text
+
+
+def fetch_article_published_date(url: str):
+    from bs4 import BeautifulSoup
+    try:
+        return page_published_date(BeautifulSoup(_fetch_article_html(url), "html.parser"))
+    except Exception as error:
+        print(f"Publication date unavailable ({url}): {type(error).__name__}")
+        return None
+
+
 def fetch_article_content(url: str) -> str:
     """
     Fetch the full article content from the URL.
@@ -348,25 +368,22 @@ def fetch_article_content(url: str) -> str:
     Returns:
         The extracted text content of the article.
     """
-    import requests
     from bs4 import BeautifulSoup
     
     try:
-        # User-Agent header is often required to avoid 403 Forbidden
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        }
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        
-        soup = BeautifulSoup(response.text, "html.parser")
+        soup = BeautifulSoup(_fetch_article_html(url), "html.parser")
+
+        abstract = soup.select_one("blockquote.abstract")
+        if abstract:
+            return abstract.get_text(" ", strip=True)[:6000]
         
         # Remove script and style elements
         for script in soup(["script", "style", "nav", "footer", "header"]):
             script.decompose()
             
         # Extract text from p tags (most common for articles)
-        paragraphs = soup.find_all("p")
+        body = soup.find("article") or soup.find("main") or soup
+        paragraphs = body.find_all("p")
         text_content = "\n\n".join([p.get_text().strip() for p in paragraphs if len(p.get_text().strip()) > 20])
         
         # Fallback if content is too short
