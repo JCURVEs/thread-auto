@@ -1,0 +1,16 @@
+{
+  "source": "archive/2026/09월/2026-09-10.md",
+  "source_url": "https://developer.nvidia.com/blog/when-to-use-encode-prefill-decode-disaggregation-to-accelerate-multimodal-model-serving/",
+  "company": "NVIDIA",
+  "title": "멀티모달 모델 서빙 가속을 위한 인코더-프리필-디코드 분리(EPD) 기법 및 NVIDIA Dynamo 적용",
+  "category": "API/인프라",
+  "importance": 8,
+  "thread_count": 9,
+  "image_url": "https://developer-blogs.nvidia.com/wp-content/uploads/2026/09/multimodal-dynamo.webp",
+  "created_at": "2026-09-10T02:10:51",
+  "status": "draft",
+  "generator": "thread_generator.py",
+  "review_status": "BLOCKED",
+  "review_blocking_count": 1,
+  "review_warning_count": 0
+}
