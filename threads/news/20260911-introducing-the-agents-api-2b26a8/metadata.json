@@ -1,0 +1,16 @@
+{
+  "source": "archive/2026/09월/2026-09-11.md",
+  "source_url": "https://openai.com/index/introducing-the-agents-api",
+  "company": "OpenAI",
+  "title": "OpenAI, Codex 기반 에이전트 오케스트레이션 인프라를 Agents API로 공개",
+  "category": "에이전트/자동화",
+  "importance": 9,
+  "thread_count": 9,
+  "image_url": "https://images.ctfassets.net/kftzwdyauwt9/430gA5qBJZHD8Dd4uGmm6J/f91d9df145eab0f0f981f60958026813/og-image.png?w=1600&h=900&fit=fill",
+  "created_at": "2026-09-11T02:09:17",
+  "status": "draft",
+  "generator": "thread_generator.py",
+  "review_status": "READY_FOR_HUMAN_REVIEW",
+  "review_blocking_count": 0,
+  "review_warning_count": 0
+}
