@@ -2,8 +2,8 @@ name: Thread-Auto Daily Run
 
 on:
   schedule:
-    # 매일 한국 시간 오전 9시 (UTC 00:00) 실행
-    - cron: '0 0 * * *'
+    # 매일 한국 시간 오전 7시 30분 (전날 UTC 22:30) 실행
+    - cron: '30 22 * * *'
   workflow_dispatch: # 수동 실행 버튼 (테스트용)
     inputs:
       ai_provider:
