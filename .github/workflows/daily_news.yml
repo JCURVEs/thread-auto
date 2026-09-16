@@ -4,6 +4,8 @@ on:
   schedule:
     # 매일 한국 시간 오전 7시 30분 (전날 UTC 22:30) 실행
     - cron: '30 22 * * *'
+    # GitHub 예약 실행 누락에 대비한 오전 8시 30분 백업
+    - cron: '30 23 * * *'
   workflow_dispatch: # 수동 실행 버튼 (테스트용)
     inputs:
       ai_provider:
@@ -15,6 +17,10 @@ on:
         required: false
         default: 'true'
 
+concurrency:
+  group: thread-auto-daily
+  cancel-in-progress: false
+
 jobs:
   thread-auto-pipeline:
     runs-on: ubuntu-latest
@@ -25,19 +31,41 @@ jobs:
     - name: 📥 리포지토리 체크아웃
       uses: actions/checkout@v4
 
+    - name: 당일 성공 실행 확인
+      id: preflight
+      shell: bash
+      run: |
+        RUN_YEAR=$(TZ=Asia/Seoul date +'%Y')
+        RUN_MONTH=$(TZ=Asia/Seoul date +'%m월')
+        RUN_DATE=$(TZ=Asia/Seoul date +'%Y-%m-%d')
+        LOG_PATH="logs/daily/${RUN_YEAR}/${RUN_MONTH}/${RUN_DATE}.md"
+
+        if [ "${{ github.event_name }}" = "schedule" ] \
+          && [ -f "$LOG_PATH" ] \
+          && grep -q -- '- Pipeline status: success' "$LOG_PATH"; then
+          echo "skip=true" >> "$GITHUB_OUTPUT"
+          echo "Today's successful run already exists: $LOG_PATH"
+        else
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "No successful run found for today. Starting pipeline."
+        fi
+
     - name: 🐍 Python 설정 (3.10)
+      if: steps.preflight.outputs.skip != 'true'
       uses: actions/setup-python@v5
       with:
         python-version: '3.10'
         cache: 'pip'
 
     - name: 📦 라이브러리 설치
+      if: steps.preflight.outputs.skip != 'true'
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         playwright install chromium
 
     - name: 🚀 Thread-Auto 파이프라인 실행
+      if: steps.preflight.outputs.skip != 'true'
       env:
         # AI Provider 설정 (기본: Groq 무료 티어)
         AI_PROVIDER: ${{ github.event.inputs.ai_provider || 'groq' }}
@@ -64,14 +92,14 @@ jobs:
       run: python main.py
 
     - name: 🗓️ 일일 실행 로그 생성
-      if: always()
+      if: always() && steps.preflight.outputs.skip != 'true'
       env:
         AI_PROVIDER: ${{ github.event.inputs.ai_provider || 'groq' }}
         DRY_RUN: ${{ github.event.inputs.dry_run || vars.DRY_RUN || 'true' }}
       run: python scripts/write_daily_run_log.py
 
     - name: 💾 Git 커밋 및 푸시
-      if: always() && github.ref == 'refs/heads/main'
+      if: always() && github.ref == 'refs/heads/main' && steps.preflight.outputs.skip != 'true'
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         GIT_AUTHOR_NAME: ${{ vars.GIT_AUTHOR_NAME || 'JCURVEs' }}
@@ -99,5 +127,6 @@ jobs:
         echo "## Thread-Auto 실행 완료" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "- 실행 시간: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+        echo "- 중복 방지로 건너뜀: ${{ steps.preflight.outputs.skip }}" >> $GITHUB_STEP_SUMMARY
         echo "- AI Provider: ${{ github.event.inputs.ai_provider || 'groq' }}" >> $GITHUB_STEP_SUMMARY
         echo "- DRY_RUN 모드: ${{ github.event.inputs.dry_run || vars.DRY_RUN || 'true' }}" >> $GITHUB_STEP_SUMMARY
