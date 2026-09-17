@@ -1,0 +1,16 @@
+{
+  "source": "archive/2026/09월/2026-09-17.md",
+  "source_url": "https://developer.nvidia.com/blog/translating-cuda-tile-operations-from-python-to-rust-using-agentic-ai/",
+  "company": "NVIDIA",
+  "title": "AI 에이전트를 활용한 CUDA Tile Python에서 Rust로의 GPU 커널 자동 변환 기술",
+  "category": "오픈소스 도구",
+  "importance": 8,
+  "thread_count": 9,
+  "image_url": "https://developer-blogs.nvidia.com/wp-content/uploads/2025/07/neon-green-cube.png",
+  "created_at": "2026-09-17T00:51:43",
+  "status": "draft",
+  "generator": "thread_generator.py",
+  "review_status": "BLOCKED",
+  "review_blocking_count": 1,
+  "review_warning_count": 0
+}
