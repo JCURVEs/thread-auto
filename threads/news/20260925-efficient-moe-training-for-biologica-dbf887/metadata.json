@@ -1,0 +1,16 @@
+{
+  "source": "archive/2026/09월/2026-09-25.md",
+  "source_url": "https://developer.nvidia.com/blog/efficient-moe-training-for-biological-foundation-models/",
+  "company": "NVIDIA",
+  "title": "NVIDIA Transformer Engine 기반 MoE 생물학 파운데이션 모델 효율적 학습 튜토리얼 공개",
+  "category": "오픈소스 도구",
+  "importance": 8,
+  "thread_count": 9,
+  "image_url": "https://developer-blogs.nvidia.com/wp-content/uploads/2026/09/DNA-Helix.webp",
+  "created_at": "2026-09-25T00:44:35",
+  "status": "draft",
+  "generator": "thread_generator.py",
+  "review_status": "BLOCKED",
+  "review_blocking_count": 1,
+  "review_warning_count": 0
+}
