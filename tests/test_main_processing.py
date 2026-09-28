@@ -347,8 +347,8 @@ def test_run_pipeline_can_queue_pending_when_api_key_missing(monkeypatch, tmp_pa
     assert summary["stats"]["no_ai_provider_pending"] == 1
 
 
-def test_run_pipeline_can_fail_when_no_articles_required(monkeypatch, tmp_path):
-    """일일 글 생성이 필수인 실행에서 0건 수집은 실패로 기록해야 함."""
+def test_run_pipeline_succeeds_when_no_new_eligible_articles(monkeypatch, tmp_path):
+    """정상 수집 후 신규 적격 글이 없는 날은 운영 실패가 아니다."""
 
     summary_path = tmp_path / "last_run.json"
     monkeypatch.setattr(main, "LAST_RUN_SUMMARY_PATH", summary_path)
@@ -361,11 +361,62 @@ def test_run_pipeline_can_fail_when_no_articles_required(monkeypatch, tmp_path):
 
     exit_code = main.run_pipeline()
 
+    assert exit_code == 0
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary["status"] == "success"
+    assert summary["total_articles"] == 0
+    assert summary["error"] == ""
+    assert summary["stats"]["no_new_eligible_articles"] == 1
+
+
+def test_run_pipeline_fails_when_all_sources_are_unavailable(monkeypatch, tmp_path):
+    """모든 소스가 응답하지 않으면 신규 글 0건을 정상으로 숨기지 않는다."""
+
+    summary_path = tmp_path / "last_run.json"
+    monkeypatch.setattr(main, "LAST_RUN_SUMMARY_PATH", summary_path)
+    monkeypatch.setattr(main, "REQUIRE_DAILY_ARTICLE", True)
+    monkeypatch.setattr(main, "daily_archive_exists", lambda: False)
+    monkeypatch.setattr(main, "get_api_key", lambda provider=None: "key")
+    monkeypatch.setattr(main, "create_client", lambda api_key, provider, model: {})
+    monkeypatch.setattr(main, "DEFAULT_RSS_SOURCES", {"openai": "https://example.com/rss"})
+
+    def fail_source(*args):
+        main.record_pipeline_stat("source_fetch_failed")
+        return 0
+
+    monkeypatch.setattr(main, "process_single_source", fail_source)
+
+    exit_code = main.run_pipeline()
+
     assert exit_code == 3
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
     assert summary["status"] == "failed"
-    assert summary["total_articles"] == 0
-    assert summary["error"] == "no_articles_archived"
+    assert summary["error"] == "all_sources_failed"
+
+
+def test_run_pipeline_fails_when_articles_are_only_queued_pending(monkeypatch, tmp_path):
+    """분석 실패로 pending에만 쌓인 날은 사용자 조치가 필요한 실패다."""
+
+    summary_path = tmp_path / "last_run.json"
+    monkeypatch.setattr(main, "LAST_RUN_SUMMARY_PATH", summary_path)
+    monkeypatch.setattr(main, "REQUIRE_DAILY_ARTICLE", True)
+    monkeypatch.setattr(main, "daily_archive_exists", lambda: False)
+    monkeypatch.setattr(main, "get_api_key", lambda provider=None: "key")
+    monkeypatch.setattr(main, "create_client", lambda api_key, provider, model: {})
+    monkeypatch.setattr(main, "DEFAULT_RSS_SOURCES", {"openai": "https://example.com/rss"})
+
+    def queue_only(*args):
+        main.record_pipeline_stat("queued_pending")
+        return 0
+
+    monkeypatch.setattr(main, "process_single_source", queue_only)
+
+    exit_code = main.run_pipeline()
+
+    assert exit_code == 3
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary["status"] == "failed"
+    assert summary["error"] == "articles_queued_pending"
 
 
 def test_run_pipeline_succeeds_when_daily_archive_already_exists(monkeypatch, tmp_path):

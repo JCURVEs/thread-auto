@@ -392,6 +392,19 @@ def daily_archive_exists(now: Optional[datetime] = None) -> bool:
     return archive_path.is_file() and archive_path.stat().st_size > 0
 
 
+def zero_article_failure(total_sources: int) -> str:
+    """Return an operational failure reason, or an empty string for a healthy no-update run."""
+    if total_sources > 0 and PROCESS_STATS.get("source_fetch_failed", 0) >= total_sources:
+        return "all_sources_failed"
+    if PROCESS_STATS.get("archive_failed", 0) > 0:
+        return "archive_failed"
+    if PROCESS_STATS.get("entry_unexpected_error", 0) > 0:
+        return "entry_processing_failed"
+    if PROCESS_STATS.get("queued_pending", 0) > 0:
+        return "articles_queued_pending"
+    return ""
+
+
 def process_single_entry(entry: dict, source_name: str, client: Optional[dict], model: str) -> bool:
     """
     Process a single RSS entry.
@@ -700,16 +713,20 @@ def run_pipeline() -> int:
         print("✅ 오늘 아카이브가 이미 있어 중복 없이 정상 종료합니다.")
 
     elif total_articles == 0 and REQUIRE_DAILY_ARTICLE:
-        error = "no_articles_archived"
-        print(f"❌ REQUIRE_DAILY_ARTICLE=true 이지만 새 아카이브가 없습니다: {error}")
-        write_pipeline_summary(
-            "failed",
-            total_articles=total_articles,
-            total_sources=total_count,
-            source_results=source_results,
-            error=error,
-        )
-        return 3
+        error = zero_article_failure(total_count)
+        if error:
+            print(f"❌ 새 아카이브를 만들지 못한 운영 오류가 있습니다: {error}")
+            write_pipeline_summary(
+                "failed",
+                total_articles=total_articles,
+                total_sources=total_count,
+                source_results=source_results,
+                error=error,
+            )
+            return 3
+
+        record_pipeline_stat("no_new_eligible_articles")
+        print("✅ 소스 수집은 정상이지만 새 적격 기사가 없어 정상 종료합니다.")
 
     write_pipeline_summary(
         "success",
