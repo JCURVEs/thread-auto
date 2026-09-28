@@ -22,6 +22,9 @@ def test_enabled_sources_cover_priority_collection_groups():
     assert "nvidia_korea_blog" in enabled_sources
     assert "microsoft_research" in enabled_sources
     assert "google_cloud_ai" in enabled_sources
+    assert enabled_sources["meta_ai"] == "https://about.fb.com/news/tag/ai/feed/"
+    assert enabled_sources["meta_newsroom"] == "https://about.fb.com/feed/"
+    assert "meta_research" not in enabled_sources
     assert "amd_rocm" not in enabled_sources
     assert "azure_ai" not in enabled_sources
     assert "aws_machine_learning" not in enabled_sources
@@ -37,16 +40,31 @@ def test_registry_records_unstable_requested_sources_without_enabling_them():
     assert "amd_rocm" in SOURCE_REGISTRY
     assert "azure_ai" in SOURCE_REGISTRY
     assert "aws_machine_learning" in SOURCE_REGISTRY
+    assert "meta_research" in SOURCE_REGISTRY
     assert "microsoft_ai" in disabled_sources
     assert "perplexity" in disabled_sources
     assert "amd_rocm" in disabled_sources
     assert "azure_ai" in disabled_sources
     assert "aws_machine_learning" in disabled_sources
+    assert "meta_research" in disabled_sources
     assert disabled_sources["microsoft_ai"]["disabled_reason"]
     assert disabled_sources["perplexity"]["disabled_reason"]
     assert disabled_sources["amd_rocm"]["disabled_reason"]
     assert disabled_sources["azure_ai"]["disabled_reason"]
     assert disabled_sources["aws_machine_learning"]["disabled_reason"]
+    assert disabled_sources["meta_research"]["disabled_reason"]
+
+
+def test_meta_sources_use_current_official_rss_feeds():
+    """Meta AI와 Newsroom은 현재 발행되는 공식 RSS를 사용해야 함."""
+
+    for source_name in ("meta_ai", "meta_newsroom"):
+        config = SOURCE_REGISTRY[source_name]
+        assert config["enabled"] is True
+        assert config["fetch_mode"] == "rss"
+        assert config["url"].startswith("https://about.fb.com/")
+
+    assert SOURCE_REGISTRY["meta_research"]["enabled"] is False
 
 
 def test_registry_does_not_add_open_source_release_feeds():

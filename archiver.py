@@ -247,6 +247,8 @@ def save_to_archive(
         "google_research": "Google Research",
         "huggingface": "Hugging Face",
         "meta_research": "Meta AI",
+        "meta_ai": "Meta AI",
+        "meta_newsroom": "Meta Newsroom",
         "nvidia_technical": "NVIDIA",
         "nvidia_developer_ai": "NVIDIA",
         "nvidia_korea_blog": "NVIDIA Korea",

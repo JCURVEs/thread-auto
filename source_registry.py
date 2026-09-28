@@ -57,6 +57,23 @@ SOURCE_REGISTRY: Dict[str, Dict[str, Any]] = {
         "group": "research_lab",
         "fetch_mode": "rss",
         "weight": 1.0,
+        "enabled": False,
+        "disabled_reason": "Official feed has not published new entries since 2023.",
+    },
+    "meta_ai": {
+        "url": "https://about.fb.com/news/tag/ai/feed/",
+        "name": "Meta AI",
+        "group": "frontier_lab",
+        "fetch_mode": "rss",
+        "weight": 1.15,
+        "enabled": True,
+    },
+    "meta_newsroom": {
+        "url": "https://about.fb.com/feed/",
+        "name": "Meta Newsroom",
+        "group": "frontier_lab",
+        "fetch_mode": "rss",
+        "weight": 1.05,
         "enabled": True,
     },
 
