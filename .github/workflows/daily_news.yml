@@ -2,10 +2,9 @@ name: Thread-Auto Daily Run
 
 on:
   schedule:
-    # 매일 한국 시간 오전 7시 30분 (전날 UTC 22:30) 실행
-    - cron: '30 22 * * *'
-    # GitHub 예약 실행 누락에 대비한 오전 8시 30분 백업
-    - cron: '30 23 * * *'
+    # GitHub cron 지연에 대비해 한국 시간 오전 4시 30분부터 8시 30분까지
+    # 매시간 확인한다. 당일 성공 로그가 있으면 preflight에서 즉시 종료한다.
+    - cron: '30 19-23 * * *'
   workflow_dispatch: # 수동 실행 버튼 (테스트용)
     inputs:
       ai_provider:

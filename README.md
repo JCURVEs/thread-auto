@@ -33,7 +33,7 @@ playwright install chromium
 
 ## 자동 실행
 
-`.github/workflows/daily_news.yml`이 매일 한국 시간 오전 9시에 실행됩니다. 수집 결과는 `archive/`, 실행 기록은 `logs/daily/`에 커밋됩니다.
+`.github/workflows/daily_news.yml`이 매일 한국 시간 오전 4시 30분부터 8시 30분까지 실행을 확인합니다. 첫 성공 이후 실행은 자동으로 건너뛰며, 수집 결과는 `archive/`, 실행 기록은 `logs/daily/`에 커밋됩니다.
 
 ## 주요 파일
 
