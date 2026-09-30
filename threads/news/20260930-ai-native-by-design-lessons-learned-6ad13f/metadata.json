@@ -1,0 +1,16 @@
+{
+  "source": "archive/2026/09월/2026-09-30.md",
+  "source_url": "https://developer.nvidia.com/blog/ai-native-by-design-lessons-learned-from-building-nvidia-tensorrt-model-connect/",
+  "company": "NVIDIA",
+  "title": "NVIDIA TensorRT Model Connect: AI 코딩 에이전트 기반 오픈소스 C++ 모델 구현체 프로젝트 공개",
+  "category": "오픈소스 도구",
+  "importance": 8,
+  "thread_count": 9,
+  "image_url": "https://developer-blogs.nvidia.com/wp-content/uploads/2026/07/llm-optimize-deploy.webp",
+  "created_at": "2026-09-30T01:31:06",
+  "status": "draft",
+  "generator": "thread_generator.py",
+  "review_status": "BLOCKED",
+  "review_blocking_count": 1,
+  "review_warning_count": 0
+}
