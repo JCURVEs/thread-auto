@@ -1,0 +1,16 @@
+{
+  "source": "archive/2026/10월/2026-10-01.md",
+  "source_url": "https://developer.nvidia.com/blog/build-local-ai-apps-with-c-and-nvidia-tensorrt-rtx-samples/",
+  "company": "NVIDIA",
+  "title": "NVIDIA TensorRT RTX와 ONNX Runtime 기반 C++ 로컬 AI 배포 샘플 공개",
+  "category": "오픈소스 도구",
+  "importance": 8,
+  "thread_count": 9,
+  "image_url": "https://developer-blogs.nvidia.com/wp-content/uploads/2026/09/din-deploy-featured.webp",
+  "created_at": "2026-10-01T23:20:11",
+  "status": "draft",
+  "generator": "thread_generator.py",
+  "review_status": "BLOCKED",
+  "review_blocking_count": 1,
+  "review_warning_count": 0
+}
