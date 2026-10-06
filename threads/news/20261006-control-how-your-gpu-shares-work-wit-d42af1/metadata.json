@@ -1,0 +1,16 @@
+{
+  "source": "archive/2026/10월/2026-10-06.md",
+  "source_url": "https://developer.nvidia.com/blog/control-how-your-gpu-shares-work-with-green-contexts/",
+  "company": "NVIDIA",
+  "title": "CUDA 13.1 Runtime API에 그린 컨텍스트(Green Contexts) 지원으로 GPU 리소스 분할 제어 가능",
+  "category": "오픈소스 도구",
+  "importance": 8,
+  "thread_count": 9,
+  "image_url": "https://developer-blogs.nvidia.com/wp-content/uploads/2026/10/image1-3.webp",
+  "created_at": "2026-10-06T23:12:50",
+  "status": "draft",
+  "generator": "thread_generator.py",
+  "review_status": "BLOCKED",
+  "review_blocking_count": 1,
+  "review_warning_count": 0
+}
