@@ -708,11 +708,7 @@ def run_pipeline() -> int:
         print(f"# ⚠️ 새로 수집된 기사가 없습니다.")
     print("#" * 70 + "\n")
 
-    if total_articles == 0 and REQUIRE_DAILY_ARTICLE and daily_archive_exists():
-        record_pipeline_stat("daily_archive_already_exists")
-        print("✅ 오늘 아카이브가 이미 있어 중복 없이 정상 종료합니다.")
-
-    elif total_articles == 0 and REQUIRE_DAILY_ARTICLE:
+    if total_articles == 0 and REQUIRE_DAILY_ARTICLE:
         error = zero_article_failure(total_count)
         if error:
             print(f"❌ 새 아카이브를 만들지 못한 운영 오류가 있습니다: {error}")
@@ -725,8 +721,12 @@ def run_pipeline() -> int:
             )
             return 3
 
-        record_pipeline_stat("no_new_eligible_articles")
-        print("✅ 소스 수집은 정상이지만 새 적격 기사가 없어 정상 종료합니다.")
+        if daily_archive_exists():
+            record_pipeline_stat("daily_archive_already_exists")
+            print("✅ 오늘 아카이브가 이미 있어 중복 없이 정상 종료합니다.")
+        else:
+            record_pipeline_stat("no_new_eligible_articles")
+            print("✅ 소스 수집은 정상이지만 새 적격 기사가 없어 정상 종료합니다.")
 
     write_pipeline_summary(
         "success",

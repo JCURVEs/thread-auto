@@ -419,6 +419,29 @@ def test_run_pipeline_fails_when_articles_are_only_queued_pending(monkeypatch, t
     assert summary["error"] == "articles_queued_pending"
 
 
+def test_run_pipeline_reports_pending_even_when_daily_archive_exists(monkeypatch, tmp_path):
+    """An earlier archive must not hide a later article waiting for analysis."""
+
+    summary_path = tmp_path / "last_run.json"
+    monkeypatch.setattr(main, "LAST_RUN_SUMMARY_PATH", summary_path)
+    monkeypatch.setattr(main, "REQUIRE_DAILY_ARTICLE", True)
+    monkeypatch.setattr(main, "daily_archive_exists", lambda: True)
+    monkeypatch.setattr(main, "get_api_key", lambda provider=None: "key")
+    monkeypatch.setattr(main, "create_client", lambda api_key, provider, model: {})
+    monkeypatch.setattr(main, "DEFAULT_RSS_SOURCES", {"meta_ai": "https://example.com/rss"})
+
+    def queue_only(*args):
+        main.record_pipeline_stat("queued_pending")
+        return 0
+
+    monkeypatch.setattr(main, "process_single_source", queue_only)
+
+    assert main.run_pipeline() == 3
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary["status"] == "failed"
+    assert summary["error"] == "articles_queued_pending"
+
+
 def test_run_pipeline_succeeds_when_daily_archive_already_exists(monkeypatch, tmp_path):
     """같은 날 재실행에서 모두 중복이어도 오늘 아카이브가 있으면 정상 종료해야 함."""
 
