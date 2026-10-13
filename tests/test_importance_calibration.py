@@ -81,6 +81,21 @@ def test_model_release_without_business_signal_keeps_high_score():
     assert "importance_original" not in calibrated
 
 
+def test_model_evaluation_is_not_mistaken_for_valuation():
+    """Technical evaluation must not trigger the business keyword valuation."""
+
+    content = make_content(category="LLM 출시", importance=9)
+    calibrated = calibrate_importance(
+        content,
+        source_name="meta_ai",
+        original_title="Introducing Muse Wonder and Muse Wonder Full: Frontier Models for Agents",
+        article_content="We train and evaluate our models and will publish additional safety evaluations.",
+    )
+
+    assert calibrated["importance"] == 9
+    assert "importance_original" not in calibrated
+
+
 def test_high_weight_platform_source_can_boost_practical_article():
     """실무 기술 신호가 있는 고가중치 플랫폼 소스는 한 단계 보정 가능해야 함."""
 

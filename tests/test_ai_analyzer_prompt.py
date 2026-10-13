@@ -5,7 +5,7 @@ AI analyzer prompt construction tests.
 import json
 import pytest
 
-from ai_analyzer import AIAnalysisError, _clean_prompt_text, _normalize_generated_korean, generate_thread_content
+from ai_analyzer import AIAnalysisError, SYSTEM_PROMPT, _clean_prompt_text, _normalize_generated_korean, generate_thread_content
 
 
 class FakeMessage:
@@ -69,6 +69,10 @@ def test_generate_thread_content_includes_article_body_when_provided():
     assert "[기사 본문]" in user_prompt
     assert "긴 기사 본문입니다. 실제 근거 문장입니다." in user_prompt
     assert "RSS 요약보다 기사 본문을 우선 근거" in user_prompt
+
+
+def test_prompt_distinguishes_product_availability():
+    assert "제품별 공개 대상이나 제공 경로" in SYSTEM_PROMPT
 
 
 def test_generate_thread_content_omits_article_body_when_missing():
