@@ -8,8 +8,18 @@ import json
 import os
 import glob
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional, Set, List
+
+
+KST = timezone(timedelta(hours=9), name="KST")
+
+
+def archive_datetime(date: Optional[datetime] = None) -> datetime:
+    """Use the Korean calendar day for archives, including UTC-aware inputs."""
+    if date is None:
+        return datetime.now(KST)
+    return date.astimezone(KST) if date.tzinfo else date
 
 
 def get_archive_dir() -> str:
@@ -19,8 +29,7 @@ def get_archive_dir() -> str:
 
 def get_archive_month_dir(date: Optional[datetime] = None) -> str:
     """Get year/month archive directory path."""
-    if date is None:
-        date = datetime.now()
+    date = archive_datetime(date)
 
     return os.path.join(
         get_archive_dir(),
@@ -31,8 +40,7 @@ def get_archive_month_dir(date: Optional[datetime] = None) -> str:
 
 def get_archive_path(date: Optional[datetime] = None) -> str:
     """Get daily archive file path."""
-    if date is None:
-        date = datetime.now()
+    date = archive_datetime(date)
 
     filename = date.strftime("%Y-%m-%d.md")
     archive_dir = get_archive_month_dir(date)
@@ -44,8 +52,7 @@ def get_archive_path(date: Optional[datetime] = None) -> str:
 
 def get_pending_path(date: Optional[datetime] = None) -> str:
     """Get the JSONL path for source items that still need Korean analysis."""
-    if date is None:
-        date = datetime.now()
+    date = archive_datetime(date)
 
     pending_dir = os.path.join(
         get_archive_dir(),
@@ -189,7 +196,7 @@ def save_to_pending(
     """Preserve a failed source as raw JSONL without polluting the public archive."""
     filepath = get_pending_path()
     record = {
-        "queued_at": datetime.now().isoformat(timespec="seconds"),
+        "queued_at": archive_datetime().isoformat(timespec="seconds"),
         "source_name": source_name,
         "source_url": source_url,
         "original_title": original_title,
@@ -227,7 +234,7 @@ def save_to_archive(
     ![Image](url)
     ---
     """
-    archive_date = datetime.now()
+    archive_date = archive_datetime()
     filepath = get_archive_path(archive_date)
 
     # Prepare content block

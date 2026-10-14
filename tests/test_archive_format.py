@@ -7,7 +7,7 @@
 import os
 import tempfile
 import shutil
-from datetime import datetime
+from datetime import datetime, timezone
 import pytest
 import archiver
 from archiver import save_to_archive
@@ -76,6 +76,17 @@ def test_archive_path_uses_year_month_folders(temp_dir):
     filepath = archiver.get_archive_path(datetime(2026, 7, 10))
 
     assert filepath.endswith(os.path.join("archive", "2026", "07월", "2026-07-10.md"))
+
+
+def test_utc_late_night_is_next_korean_archive_day(temp_dir):
+    utc_time = datetime(2026, 10, 13, 23, 45, tzinfo=timezone.utc)
+
+    assert archiver.get_archive_path(utc_time).endswith(
+        os.path.join("archive", "2026", "10월", "2026-10-14.md")
+    )
+    assert archiver.get_pending_path(utc_time).endswith(
+        os.path.join("archive", "pending", "2026", "10월", "2026-10-14.jsonl")
+    )
 
 
 def test_output_format_without_image(temp_dir):
