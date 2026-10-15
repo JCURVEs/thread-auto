@@ -1,0 +1,16 @@
+{
+  "source": "archive/2026/10월/2026-10-16.md",
+  "source_url": "https://huggingface.co/blog/meta-muse-spark-open",
+  "company": "Hugging Face",
+  "title": "Meta, 816B 파라미터 오픈웨이트 멀티모달 MoE 모델 'Muse Spark Open' 공개",
+  "category": "LLM 출시",
+  "importance": 9,
+  "thread_count": 9,
+  "image_url": "https://huggingface.co/blog/assets/meta-muse-spark-open/thumbnail.png",
+  "created_at": "2026-10-15T19:56:20",
+  "status": "draft",
+  "generator": "thread_generator.py",
+  "review_status": "READY_FOR_HUMAN_REVIEW",
+  "review_blocking_count": 0,
+  "review_warning_count": 0
+}
