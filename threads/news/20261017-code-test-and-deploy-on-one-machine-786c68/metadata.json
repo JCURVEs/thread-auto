@@ -1,0 +1,16 @@
+{
+  "source": "archive/2026/10월/2026-10-17.md",
+  "source_url": "https://developer.nvidia.com/blog/code-test-and-deploy-on-one-machine-with-nvidia-rtx-spark/",
+  "company": "NVIDIA",
+  "title": "NVIDIA RTX Spark: GB10 SoC 기반 로컬 AI 개발 환경 통합",
+  "category": "API/인프라",
+  "importance": 9,
+  "thread_count": 9,
+  "image_url": "https://developer-blogs.nvidia.com/wp-content/uploads/2026/10/image2-7.webp",
+  "created_at": "2026-10-16T19:35:40",
+  "status": "draft",
+  "generator": "thread_generator.py",
+  "review_status": "BLOCKED",
+  "review_blocking_count": 1,
+  "review_warning_count": 0
+}
