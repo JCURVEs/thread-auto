@@ -1,0 +1,16 @@
+{
+  "source": "archive/2026/10월/2026-10-20.md",
+  "source_url": "https://huggingface.co/blog/hf-torchneuron",
+  "company": "Hugging Face",
+  "title": "TorchNeuron: PyTorch 네이티브 백엔드 기반 AWS Trainium 지원 강화",
+  "category": "오픈소스 도구",
+  "importance": 8,
+  "thread_count": 9,
+  "image_url": "https://huggingface.co/blog/assets/hf-torchneuron/thumbnail.png",
+  "created_at": "2026-10-19T21:06:01",
+  "status": "draft",
+  "generator": "thread_generator.py",
+  "review_status": "READY_FOR_HUMAN_REVIEW",
+  "review_blocking_count": 0,
+  "review_warning_count": 0
+}
