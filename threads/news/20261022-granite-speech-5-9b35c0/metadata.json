@@ -1,0 +1,16 @@
+{
+  "source": "archive/2026/10월/2026-10-22.md",
+  "source_url": "https://huggingface.co/blog/ibm-granite/granite-speech-5",
+  "company": "Hugging Face",
+  "title": "IBM Granite Speech 5.0 공개: Apache 2.0 라이선스 기반 다국어 ASR 및 실시간 처리 성능 향상",
+  "category": "오픈소스 도구",
+  "importance": 8,
+  "thread_count": 9,
+  "image_url": "https://cdn-uploads.huggingface.co/production/uploads/653fb52cbfd890805461d691/M_JJyIOBOWVzHXdy7CVVG.png",
+  "created_at": "2026-10-21T20:13:52",
+  "status": "draft",
+  "generator": "thread_generator.py",
+  "review_status": "READY_FOR_HUMAN_REVIEW",
+  "review_blocking_count": 0,
+  "review_warning_count": 0
+}
