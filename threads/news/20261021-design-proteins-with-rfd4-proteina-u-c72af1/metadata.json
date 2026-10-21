@@ -1,0 +1,16 @@
+{
+  "source": "archive/2026/10월/2026-10-21.md",
+  "source_url": "https://developer.nvidia.com/blog/design-proteins-with-rfd4-proteina-using-reward-guided-inference-time-search/",
+  "company": "NVIDIA",
+  "title": "NVIDIA, 보상 기반 추론 탐색을 활용한 오픈소스 단백질 설계 모델 RFD4-Proteina 공개",
+  "category": "오픈소스 도구",
+  "importance": 9,
+  "thread_count": 9,
+  "image_url": "https://developer-blogs.nvidia.com/wp-content/uploads/2026/10/image4-2.webp",
+  "created_at": "2026-10-21T13:53:06",
+  "status": "draft",
+  "generator": "thread_generator.py",
+  "review_status": "BLOCKED",
+  "review_blocking_count": 1,
+  "review_warning_count": 0
+}
