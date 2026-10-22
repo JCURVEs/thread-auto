@@ -250,6 +250,7 @@ def save_to_archive(
     company_names = {
         "openai": "OpenAI",
         "anthropic": "Anthropic",
+        "anthropic_claude": "Anthropic",
         "deepmind": "DeepMind",
         "google_research": "Google Research",
         "huggingface": "Hugging Face",

@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from urllib.parse import urljoin
 from functools import lru_cache
 import feedparser
-from article_dates import page_published_date
+from article_dates import page_published_date, parse_date
 
 from source_registry import (
     get_enabled_sources,
@@ -122,6 +122,9 @@ def fetch_feed_or_scrape(source_name: str, url: str) -> Optional[Any]:
             print(f"❌ Anthropic 스크래핑 실패: {e}")
             return None
 
+    if fetch_mode == "claude_announcements":
+        return fetch_claude_announcements(url)
+
     if fetch_mode == "html_listing":
         return fetch_listing_page(source_name, url)
 
@@ -143,6 +146,56 @@ def make_mock_feed(entries: List[Dict[str, Any]]) -> Any:
             self.bozo = False
 
     return MockFeed(entries)
+
+
+def fetch_claude_announcements(url: str, limit: int = 15) -> Optional[Any]:
+    """Read dated Claude product announcement cards from the official listing."""
+    try:
+        import requests
+        from bs4 import BeautifulSoup
+
+        response = requests.get(
+            url,
+            headers={"User-Agent": "Thread-Auto/2.0 (+https://github.com/JCURVEs/thread-auto)"},
+            timeout=15,
+        )
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, "html.parser")
+        entries = []
+        seen_urls = set()
+
+        for card in soup.select('a[href^="/resources/articles/"]'):
+            link = urljoin(url, card["href"])
+            if link in seen_urls:
+                continue
+            seen_urls.add(link)
+
+            title_tag = card.select_one("h2, h3")
+            date_tag = card.select_one('span[class*="meta"]')
+            published = parse_date(date_tag.get_text(" ", strip=True)) if date_tag else None
+            if not title_tag or not published:
+                continue
+
+            title = title_tag.get_text(" ", strip=True)
+            description_tag = card.select_one("p")
+            description = (
+                description_tag.get_text(" ", strip=True)
+                if description_tag else title
+            )
+            entries.append({
+                "title": title,
+                "link": link,
+                "summary": description,
+                "description": description,
+                "published": published.date().isoformat(),
+            })
+            if len(entries) >= limit:
+                break
+
+        return make_mock_feed(entries) if entries else None
+    except Exception as error:
+        print(f"Claude announcements fetch failed: {error}")
+        return None
 
 
 def filter_feed_entries(source_name: str, feed: Any) -> Optional[Any]:

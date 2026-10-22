@@ -18,6 +18,7 @@ def test_enabled_sources_cover_priority_collection_groups():
 
     assert calculate_collection_score() >= 90
     assert "nvidia_technical" in enabled_sources
+    assert enabled_sources["anthropic_claude"] == "https://claude.com/resources/product-announcements"
     assert "nvidia_developer_ai" in enabled_sources
     assert "nvidia_korea_blog" in enabled_sources
     assert "microsoft_research" in enabled_sources

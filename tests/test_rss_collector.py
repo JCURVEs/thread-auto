@@ -165,3 +165,39 @@ def test_anthropic_scraper_date_validation():
         assert article["published"] != "", "Article has empty date string"
         # Date should be in ISO format or parseable
         assert len(article["published"]) > 0
+
+
+def test_claude_announcements_collects_dated_articles(monkeypatch):
+    """Claude product news must include Duet without duplicate or undated cards."""
+    import requests
+
+    class FakeResponse:
+        text = """
+        <a href="/resources/articles/claude-duet">
+          <span class="card__meta">Oct 21, 2026</span>
+          <h3>Introducing Claude Duet</h3>
+          <p>A research preview is available by waitlist.</p>
+        </a>
+        <a href="/resources/articles/claude-duet">
+          <span class="card__meta">Oct 21, 2026</span>
+          <h3>Introducing Claude Duet</h3>
+        </a>
+        <a href="/resources/articles/undated"><h3>Undated item</h3></a>
+        """
+
+        def raise_for_status(self):
+            return None
+
+    def fake_get(url, headers, timeout):
+        assert url == DEFAULT_RSS_SOURCES["anthropic_claude"]
+        return FakeResponse()
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    feed = fetch_feed_or_scrape("anthropic_claude", DEFAULT_RSS_SOURCES["anthropic_claude"])
+    entries = get_entries(feed, count=5)
+
+    assert len(entries) == 1
+    assert entries[0]["title"] == "Introducing Claude Duet"
+    assert entries[0]["link"] == "https://claude.com/resources/articles/claude-duet"
+    assert entries[0]["published"] == "2026-10-21"
+    assert entries[0]["description"] == "A research preview is available by waitlist."

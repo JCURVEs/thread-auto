@@ -27,6 +27,14 @@ SOURCE_REGISTRY: Dict[str, Dict[str, Any]] = {
         "weight": 1.15,
         "enabled": True,
     },
+    "anthropic_claude": {
+        "url": "https://claude.com/resources/product-announcements",
+        "name": "Anthropic / Claude",
+        "group": "frontier_lab",
+        "fetch_mode": "claude_announcements",
+        "weight": 1.15,
+        "enabled": True,
+    },
     "deepmind": {
         "url": "https://deepmind.google/blog/rss.xml",
         "name": "Google DeepMind",
