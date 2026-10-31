@@ -33,7 +33,7 @@
 **우리 현장에서 무엇이 통했는지**를  
 모델이 배울 수 있는 형태로 만드는 일입니다.
 
-![목표 업무에서 학습 신호를 만드는 작동 방식](assets/autoresearch-01-workflow.png)
+![기본 모델에 데이터 혼합과 학습 기법을 적용해 후보 모델을 만드는 과정](assets/autoresearch-01-training.png)
 
 ---
 
@@ -55,7 +55,7 @@ ERP에는 주문, MES에는 생산 기록,
 모델이 해결법을 배운 게 아니라  
 이미 본 사례를 알아본 것일 수 있습니다.
 
-![사건과 실제 조치와 측정 결과를 온톨로지로 연결한 도식](assets/autoresearch-02-episode.png)
+![현장 기록과 실제 조치와 측정 결과를 연결한 온톨로지 도식](assets/autoresearch-02-episode.png)
 
 ---
 
@@ -125,7 +125,7 @@ E214가 재발하지 않아야 합니다.
 사람의 승인을 받도록 설계합니다.  
 수락·수정·실패 기록은 다시 학습 사례가 됩니다.
 
-![기본 모델과 학습 기법과 매개변수로 후보를 만드는 레시피](assets/autoresearch-05-recipe.png)
+![고온 환경에서 드러난 실패 유형을 바탕으로 재실험하는 과정](assets/autoresearch-05-iteration.png)
 
 ---
 
