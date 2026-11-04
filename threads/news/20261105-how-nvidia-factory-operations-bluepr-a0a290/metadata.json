@@ -1,0 +1,16 @@
+{
+  "source": "archive/2026/11월/2026-11-05.md",
+  "source_url": "https://developer.nvidia.com/blog/how-nvidia-factory-operations-blueprint-coordinates-ai-agents-to-investigate-production-issues/",
+  "company": "NVIDIA",
+  "title": "NVIDIA FOX: 공장 운영을 위한 AI 에이전트 오케스트레이션 레퍼런스 아키텍처 공개",
+  "category": "에이전트/자동화",
+  "importance": 8,
+  "thread_count": 9,
+  "image_url": "https://developer-blogs.nvidia.com/wp-content/uploads/2026/10/FOC-Blueprint.webp",
+  "created_at": "2026-11-04T19:49:14",
+  "status": "draft",
+  "generator": "thread_generator.py",
+  "review_status": "BLOCKED",
+  "review_blocking_count": 1,
+  "review_warning_count": 0
+}
