@@ -1,0 +1,16 @@
+{
+  "source": "archive/2026/11월/2026-11-24.md",
+  "source_url": "https://openai.com/index/introducing-shirudo",
+  "company": "OpenAI",
+  "title": "OpenAI와 Cisco, eBPF 기반 Linux 실시간 보안 런타임 'Shirudo' 오픈소스 공개",
+  "category": "오픈소스 도구",
+  "importance": 8,
+  "thread_count": 9,
+  "image_url": "https://images.ctfassets.net/kftzwdyauwt9/5K7gFDr3r8vgjdIcsW6RVY/aba5325ce7902e5d1499b907f8e78f0b/shirudo-partner-logos-landscape-2x.png?w=1600&h=900&fit=fill",
+  "created_at": "2026-11-24T02:57:26",
+  "status": "draft",
+  "generator": "thread_generator.py",
+  "review_status": "READY_FOR_HUMAN_REVIEW",
+  "review_blocking_count": 0,
+  "review_warning_count": 0
+}
